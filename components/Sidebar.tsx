@@ -1,21 +1,31 @@
 
 import React from 'react';
-import { UserType } from '../types';
+import { UserType, User, AppData } from '../types';
 import { LayoutDashboard, Users, Building2, Landmark, LogOut, ChevronRight, Briefcase } from 'lucide-react';
 
 interface SidebarProps {
+  data: AppData;
   activeTab: string;
   setActiveTab: (tab: string) => void;
-  userType: UserType;
+  currentUser: User;
   onLogout: () => void;
-  userName: string;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, userType, onLogout, userName }) => {
+const Sidebar: React.FC<SidebarProps> = ({ data, activeTab, setActiveTab, currentUser, onLogout }) => {
+  const userType = currentUser.User_Type;
+  const userName = currentUser.User_Name;
+  const selectedCount = data.userPostSelections?.[currentUser.User_ID]?.length || 0;
+
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} />, adminOnly: false },
     { id: 'employees', label: 'Employees', icon: <Users size={20} />, adminOnly: false },
-    { id: 'managePosts', label: userType === UserType.ADMIN ? 'All Posts' : 'Manage My Posts', icon: <Briefcase size={20} />, adminOnly: false },
+    { 
+      id: 'managePosts', 
+      label: userType === UserType.ADMIN ? 'All Posts' : 'Manage My Posts', 
+      icon: <Briefcase size={20} />, 
+      adminOnly: false,
+      badge: userType !== UserType.ADMIN && selectedCount > 0 ? selectedCount : null
+    },
     { id: 'offices', label: 'Offices', icon: <Building2 size={20} />, adminOnly: true },
     { id: 'banks', label: 'Banks', icon: <Landmark size={20} />, adminOnly: true },
   ];
@@ -44,6 +54,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, userType, on
               >
                 {item.icon}
                 <span className="flex-grow-1">{item.label}</span>
+                {item.badge && <span className="badge bg-white text-primary rounded-pill small me-2" style={{fontSize: '0.65rem'}}>{item.badge}</span>}
                 {isActive && <ChevronRight size={14} />}
               </button>
             </li>

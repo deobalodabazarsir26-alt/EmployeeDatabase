@@ -17,7 +17,7 @@ Ensure your Google Sheet (ID: `1ESYHbrrjiTOFY49P9KXzOoGEJQPSGgWOE6JA-vNIFdU`) ha
 - `Post`
 - `Payscale`
 - `Employee`
-- `UserPostSelections`
+- `UserPostSelections` (Headers: User_ID, Post_ID)
 
 ### 2. Deploy the Google Apps Script
 1. Open your Google Sheet.
@@ -26,7 +26,7 @@ Ensure your Google Sheet (ID: `1ESYHbrrjiTOFY49P9KXzOoGEJQPSGgWOE6JA-vNIFdU`) ha
 
 ```javascript
 /**
- * GOOGLE APPS SCRIPT FOR EMS SYSTEM
+ * GOOGLE APPS SCRIPT FOR EMS SYSTEM (V2 - Relational Mapping)
  */
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
@@ -50,14 +50,20 @@ function doGet() {
     }
   });
 
-  // Special handling for UserPostSelections (Object)
+  // Special handling for UserPostSelections (Relational aggregation)
+  // Format: Column A = User_ID, Column B = Post_ID
   const upsSheet = SS.getSheetByName('UserPostSelections');
   const selections = {};
   if (upsSheet) {
     const rows = upsSheet.getDataRange().getValues();
     rows.shift(); // remove headers
     rows.forEach(row => {
-      selections[row[0]] = JSON.parse(row[1] || '[]');
+      const uId = row[0];
+      const pId = row[1];
+      if (uId) {
+        if (!selections[uId]) selections[uId] = [];
+        if (pId) selections[uId].push(Number(pId));
+      }
     });
   }
   data.userPostSelections = selections;
@@ -122,15 +128,21 @@ function deleteRow(sheetName, idColumnName, idValue) {
 function updatePostSelections(payload) {
   const sheet = SS.getSheetByName('UserPostSelections');
   const rows = sheet.getDataRange().getValues();
-  let found = false;
-  for(let i = 1; i < rows.length; i++) {
-    if(rows[i][0] == payload.User_ID) {
-      sheet.getRange(i + 1, 2).setValue(JSON.stringify(payload.Post_IDs));
-      found = true;
-      break;
+  const uId = payload.User_ID;
+  
+  // 1. Delete all existing mappings for this user
+  for (let i = rows.length - 1; i >= 1; i--) {
+    if (rows[i][0] == uId) {
+      sheet.deleteRow(i + 1);
     }
   }
-  if(!found) sheet.appendRow([payload.User_ID, JSON.stringify(payload.Post_IDs)]);
+  
+  // 2. Add new mappings (one row per post)
+  if (payload.Post_IDs && Array.isArray(payload.Post_IDs)) {
+    payload.Post_IDs.forEach(pId => {
+      sheet.appendRow([uId, pId]);
+    });
+  }
 }
 ```
 
@@ -138,11 +150,7 @@ function updatePostSelections(payload) {
 5. Select **Web App**.
 6. Set **Execute as:** Me.
 7. Set **Who has access:** Anyone.
-8. Copy the **Web App URL** provided after deployment.
-
-### 3. Configure the Web App
-1. Open `constants.tsx` in your project.
-2. Paste the URL into `GSHEET_API_URL`.
+8. Copy the **Web App URL** and update your `constants.tsx`.
 
 ---
 

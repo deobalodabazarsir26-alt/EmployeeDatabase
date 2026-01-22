@@ -14,13 +14,11 @@ import UserPostSelection from './components/UserPostSelection';
 import { LogOut, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
 
 export default function App() {
-  // Initialize user from local storage safely
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     try {
       const savedUser = localStorage.getItem('ems_user');
       return savedUser ? JSON.parse(savedUser) : null;
     } catch (e) {
-      console.error('Failed to load user session:', e);
       return null;
     }
   });
@@ -29,44 +27,50 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncError, setSyncError] = useState(false);
 
-  // Initialize data from local storage safely
   const [data, setData] = useState<AppData>(() => {
     try {
       const savedData = localStorage.getItem('ems_data');
       if (savedData) {
-        const parsed = JSON.parse(savedData);
-        // Merge with INITIAL_DATA to ensure structure integrity
-        return { ...INITIAL_DATA, ...parsed };
+        return { ...INITIAL_DATA, ...JSON.parse(savedData) };
       }
-    } catch (e) {
-      console.warn('LocalStorage data cache unavailable or corrupted.');
-    }
+    } catch (e) {}
     return INITIAL_DATA;
   });
 
   const [activeTab, setActiveTab] = useState('dashboard');
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
 
-  // Initial Sync from Google Sheets
   useEffect(() => {
     const loadData = async () => {
       setIsLoading(true);
       const remoteData = await syncService.fetchAllData();
       if (remoteData) {
-        setData(remoteData);
-        // Cache data safely
+        // Ensure userPostSelections is a clean object with numeric keys
+        // Google Sheet JSON often provides keys as strings even for numeric IDs
+        const rawSelections = (remoteData.userPostSelections || {}) as Record<string, any>;
+        const sanitizedSelections: Record<number, number[]> = {};
+        
+        Object.keys(rawSelections).forEach(key => {
+          const val = rawSelections[key];
+          sanitizedSelections[Number(key)] = Array.isArray(val) ? val.map(Number) : [];
+        });
+
+        const mergedData = { 
+          ...INITIAL_DATA, 
+          ...remoteData,
+          userPostSelections: sanitizedSelections
+        };
+        
+        setData(mergedData);
         try {
-          localStorage.setItem('ems_data', JSON.stringify(remoteData));
-        } catch (e) {
-          console.warn('LocalStorage quota exceeded. Remote data will not be cached locally.');
-        }
+          localStorage.setItem('ems_data', JSON.stringify(mergedData));
+        } catch (e) {}
       }
       setIsLoading(false);
     };
     loadData();
   }, []);
 
-  // Persist user session independently
   useEffect(() => {
     try {
       if (currentUser) {
@@ -74,22 +78,107 @@ export default function App() {
       } else {
         localStorage.removeItem('ems_user');
       }
-    } catch (e) {
-      console.error('Failed to persist user session:', e);
-    }
+    } catch (e) {}
   }, [currentUser]);
 
-  // Safe sync of data to local storage on change
-  useEffect(() => {
+  const filteredEmployees = useMemo(() => {
+    if (!currentUser) return [];
+    const employees = data.employees || [];
+    if (currentUser.User_Type === UserType.ADMIN) return employees;
+    const userOfficeIds = (data.offices || [])
+      .filter(o => o.User_ID === currentUser.User_ID)
+      .map(o => o.Office_ID);
+    return employees.filter(e => userOfficeIds.includes(e.Office_ID));
+  }, [currentUser, data.employees, data.offices]);
+
+  const performSync = async (action: string, payload: any, newState: AppData) => {
+    setData(newState);
+    setIsSyncing(true);
+    setSyncError(false);
+    
     try {
-      localStorage.setItem('ems_data', JSON.stringify(data));
-    } catch (e) {
-      // If we hit the quota, we ignore it as the source of truth is Google Sheets
-      if (e instanceof DOMException && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
-        console.warn('LocalStorage quota reached. Skipping local data cache update.');
-      }
+      localStorage.setItem('ems_data', JSON.stringify(newState));
+    } catch (e) {}
+
+    const success = await syncService.saveData(action, payload);
+    if (!success) {
+      setSyncError(true);
     }
-  }, [data]);
+    setIsSyncing(false);
+  };
+
+  const upsertEmployee = (employee: Employee) => {
+    const employees = data.employees || [];
+    const exists = employees.find(e => e.Employee_ID === employee.Employee_ID);
+    const newEmp = exists ? employee : { ...employee, Employee_ID: Date.now() };
+    const newEmployees = exists
+      ? employees.map(e => e.Employee_ID === employee.Employee_ID ? employee : e)
+      : [...employees, newEmp];
+    
+    const newState = { ...data, employees: newEmployees };
+    performSync('upsertEmployee', newEmp, newState);
+    setActiveTab('employees');
+    setEditingEmployee(null);
+  };
+
+  const deleteEmployee = (id: number) => {
+    if (confirm('Are you sure you want to delete this employee?')) {
+      const newEmployees = (data.employees || []).filter(e => e.Employee_ID !== id);
+      const newState = { ...data, employees: newEmployees };
+      performSync('deleteEmployee', { Employee_ID: id }, newState);
+    }
+  };
+
+  const upsertOffice = (office: Office) => {
+    const offices = data.offices || [];
+    const exists = offices.find(o => o.Office_ID === office.Office_ID);
+    const newOff = exists ? office : { ...office, Office_ID: Date.now() };
+    const newOffices = exists
+      ? offices.map(o => o.Office_ID === office.Office_ID ? office : o)
+      : [...offices, newOff];
+    
+    performSync('upsertOffice', newOff, { ...data, offices: newOffices });
+  };
+
+  const upsertBank = (bank: Bank) => {
+    const banks = data.banks || [];
+    const exists = banks.find(b => b.Bank_ID === bank.Bank_ID);
+    const newBk = exists ? bank : { ...bank, Bank_ID: Date.now() };
+    const newBanks = exists
+      ? banks.map(b => b.Bank_ID === bank.Bank_ID ? bank : b)
+      : [...banks, newBk];
+    
+    performSync('upsertBank', newBk, { ...data, banks: newBanks });
+  };
+
+  const upsertBranch = (branch: BankBranch) => {
+    const branches = data.branches || [];
+    const exists = branches.find(b => b.Branch_ID === branch.Branch_ID);
+    const newBr = exists ? branch : { ...branch, Branch_ID: Date.now() };
+    const newBranches = exists
+      ? branches.map(b => b.Branch_ID === branch.Branch_ID ? branch : b)
+      : [...branches, newBr];
+    
+    performSync('upsertBranch', newBr, { ...data, branches: newBranches });
+  };
+
+  const handleTogglePostSelection = (postId: number) => {
+    if (!currentUser) return;
+    const selections = data.userPostSelections || {};
+    const rawSelections = selections[currentUser.User_ID];
+    const currentSelections = Array.isArray(rawSelections) ? rawSelections : [];
+    
+    const isSelected = currentSelections.includes(postId);
+    const newSelections = isSelected 
+      ? currentSelections.filter(id => id !== postId)
+      : [...currentSelections, postId];
+    
+    const newState = {
+      ...data,
+      userPostSelections: { ...selections, [currentUser.User_ID]: newSelections }
+    };
+    performSync('updatePostSelections', { User_ID: currentUser.User_ID, Post_IDs: newSelections }, newState);
+  };
 
   const handleLogin = (user: User) => {
     setCurrentUser(user);
@@ -101,93 +190,8 @@ export default function App() {
     setActiveTab('dashboard');
   };
 
-  const filteredEmployees = useMemo(() => {
-    if (!currentUser) return [];
-    if (currentUser.User_Type === UserType.ADMIN) return data.employees;
-    const userOfficeIds = data.offices.filter(o => o.User_ID === currentUser.User_ID).map(o => o.Office_ID);
-    return data.employees.filter(e => userOfficeIds.includes(e.Office_ID));
-  }, [currentUser, data.employees, data.offices]);
-
-  const performSync = async (action: string, payload: any, newState: AppData) => {
-    setIsSyncing(true);
-    setSyncError(false);
-    const success = await syncService.saveData(action, payload);
-    if (success) {
-      setData(newState);
-    } else {
-      setSyncError(true);
-    }
-    setIsSyncing(false);
-  };
-
-  const upsertEmployee = (employee: Employee) => {
-    const exists = data.employees.find(e => e.Employee_ID === employee.Employee_ID);
-    const newEmp = exists ? employee : { ...employee, Employee_ID: Date.now() };
-    const newEmployees = exists
-      ? data.employees.map(e => e.Employee_ID === employee.Employee_ID ? employee : e)
-      : [...data.employees, newEmp];
-    
-    const newState = { ...data, employees: newEmployees };
-    performSync('upsertEmployee', newEmp, newState);
-    setActiveTab('employees');
-    setEditingEmployee(null);
-  };
-
-  const deleteEmployee = (id: number) => {
-    if (confirm('Are you sure you want to delete this employee?')) {
-      const newEmployees = data.employees.filter(e => e.Employee_ID !== id);
-      const newState = { ...data, employees: newEmployees };
-      performSync('deleteEmployee', { Employee_ID: id }, newState);
-    }
-  };
-
-  const upsertOffice = (office: Office) => {
-    const exists = data.offices.find(o => o.Office_ID === office.Office_ID);
-    const newOff = exists ? office : { ...office, Office_ID: Date.now() };
-    const newOffices = exists
-      ? data.offices.map(o => o.Office_ID === office.Office_ID ? office : o)
-      : [...data.offices, newOff];
-    
-    performSync('upsertOffice', newOff, { ...data, offices: newOffices });
-  };
-
-  const upsertBank = (bank: Bank) => {
-    const exists = data.banks.find(b => b.Bank_ID === bank.Bank_ID);
-    const newBk = exists ? bank : { ...bank, Bank_ID: Date.now() };
-    const newBanks = exists
-      ? data.banks.map(b => b.Bank_ID === bank.Bank_ID ? bank : b)
-      : [...data.banks, newBk];
-    
-    performSync('upsertBank', newBk, { ...data, banks: newBanks });
-  };
-
-  const upsertBranch = (branch: BankBranch) => {
-    const exists = data.branches.find(b => b.Branch_ID === branch.Branch_ID);
-    const newBr = exists ? branch : { ...branch, Branch_ID: Date.now() };
-    const newBranches = exists
-      ? data.branches.map(b => b.Branch_ID === branch.Branch_ID ? branch : b)
-      : [...data.branches, newBr];
-    
-    performSync('upsertBranch', newBr, { ...data, branches: newBranches });
-  };
-
-  const handleTogglePostSelection = (postId: number) => {
-    if (!currentUser) return;
-    const currentSelections = data.userPostSelections[currentUser.User_ID] || [];
-    const isSelected = currentSelections.includes(postId);
-    const newSelections = isSelected 
-      ? currentSelections.filter(id => id !== postId)
-      : [...currentSelections, postId];
-    
-    const newState = {
-      ...data,
-      userPostSelections: { ...data.userPostSelections, [currentUser.User_ID]: newSelections }
-    };
-    performSync('updatePostSelections', { User_ID: currentUser.User_ID, Post_IDs: newSelections }, newState);
-  };
-
   if (!currentUser) {
-    return <Login users={data.users} onLogin={handleLogin} />;
+    return <Login users={data.users || []} onLogin={handleLogin} />;
   }
 
   if (isLoading) {
@@ -203,7 +207,7 @@ export default function App() {
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard': return <Dashboard employees={filteredEmployees} data={data} />;
-      case 'employees': return <EmployeeList employees={filteredEmployees} data={data} onEdit={(emp) => { setEditingEmployee(emp); setActiveTab('employeeForm'); }} onDelete={deleteEmployee} onAddNew={() => { setEditingEmployee(null); setActiveTab('employeeForm'); }} />;
+      case 'employees': return <EmployeeList employees={filteredEmployees} data={data} currentUser={currentUser} onEdit={(emp) => { setEditingEmployee(emp); setActiveTab('employeeForm'); }} onDelete={deleteEmployee} onAddNew={() => { setEditingEmployee(null); setActiveTab('employeeForm'); }} />;
       case 'employeeForm': return <EmployeeForm employee={editingEmployee} data={data} currentUser={currentUser} onSave={upsertEmployee} onCancel={() => setActiveTab('employees')} />;
       case 'offices': return <OfficeManagement data={data} onSaveOffice={upsertOffice} />;
       case 'banks': return <BankManagement data={data} onSaveBank={upsertBank} onSaveBranch={upsertBranch} />;
@@ -214,7 +218,7 @@ export default function App() {
 
   return (
     <div className="container-fluid p-0 d-flex flex-column flex-md-row min-vh-100">
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} userType={currentUser.User_Type} onLogout={handleLogout} userName={currentUser.User_Name} />
+      <Sidebar data={data} activeTab={activeTab} setActiveTab={setActiveTab} currentUser={currentUser} onLogout={handleLogout} />
       
       <main className="flex-grow-1 bg-light p-3 p-md-5 overflow-auto">
         <header className="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
