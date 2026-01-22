@@ -14,14 +14,34 @@ import UserPostSelection from './components/UserPostSelection';
 import { LogOut, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
 
 export default function App() {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  // Initialize user from local storage safely
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    try {
+      const savedUser = localStorage.getItem('ems_user');
+      return savedUser ? JSON.parse(savedUser) : null;
+    } catch (e) {
+      console.error('Failed to load user session:', e);
+      return null;
+    }
+  });
+
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncError, setSyncError] = useState(false);
 
+  // Initialize data from local storage safely
   const [data, setData] = useState<AppData>(() => {
-    const saved = localStorage.getItem('ems_data');
-    return saved ? JSON.parse(saved) : INITIAL_DATA;
+    try {
+      const savedData = localStorage.getItem('ems_data');
+      if (savedData) {
+        const parsed = JSON.parse(savedData);
+        // Merge with INITIAL_DATA to ensure structure integrity
+        return { ...INITIAL_DATA, ...parsed };
+      }
+    } catch (e) {
+      console.warn('LocalStorage data cache unavailable or corrupted.');
+    }
+    return INITIAL_DATA;
   });
 
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -34,16 +54,41 @@ export default function App() {
       const remoteData = await syncService.fetchAllData();
       if (remoteData) {
         setData(remoteData);
-        localStorage.setItem('ems_data', JSON.stringify(remoteData));
+        // Cache data safely
+        try {
+          localStorage.setItem('ems_data', JSON.stringify(remoteData));
+        } catch (e) {
+          console.warn('LocalStorage quota exceeded. Remote data will not be cached locally.');
+        }
       }
       setIsLoading(false);
     };
     loadData();
   }, []);
 
-  // Sync to local storage on change
+  // Persist user session independently
   useEffect(() => {
-    localStorage.setItem('ems_data', JSON.stringify(data));
+    try {
+      if (currentUser) {
+        localStorage.setItem('ems_user', JSON.stringify(currentUser));
+      } else {
+        localStorage.removeItem('ems_user');
+      }
+    } catch (e) {
+      console.error('Failed to persist user session:', e);
+    }
+  }, [currentUser]);
+
+  // Safe sync of data to local storage on change
+  useEffect(() => {
+    try {
+      localStorage.setItem('ems_data', JSON.stringify(data));
+    } catch (e) {
+      // If we hit the quota, we ignore it as the source of truth is Google Sheets
+      if (e instanceof DOMException && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
+        console.warn('LocalStorage quota reached. Skipping local data cache update.');
+      }
+    }
   }, [data]);
 
   const handleLogin = (user: User) => {
