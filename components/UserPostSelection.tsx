@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { AppData, User, UserType, Post } from '../types';
-import { Briefcase, X, Plus, Info, CheckCircle2, Search, ArrowRight } from 'lucide-react';
+import { Briefcase, X, Plus, Info, CheckCircle2, Search, ArrowRight, Lock } from 'lucide-react';
 
 interface UserPostSelectionProps {
   data: AppData;
@@ -17,12 +17,26 @@ const UserPostSelection: React.FC<UserPostSelectionProps> = ({ data, currentUser
   const selectedPostIds = Array.isArray(rawSelections) ? rawSelections.map(id => Number(id)) : [];
   const isAdmin = currentUser.User_Type === UserType.ADMIN;
 
+  // Helper to check if a post is in use by any employee
+  const getUsageCount = (postId: number) => {
+    return (data.employees || []).filter(emp => Number(emp.Post_ID) === postId).length;
+  };
+
   // Derive the two lists
   const selectedPosts = (data.posts || []).filter(p => selectedPostIds.includes(Number(p.Post_ID)));
   const availablePosts = (data.posts || []).filter(p => 
     !selectedPostIds.includes(Number(p.Post_ID)) &&
     (searchTerm === '' || p.Post_Name.toLowerCase().includes(searchTerm.toLowerCase()))
   );
+
+  const handleRemove = (post: Post) => {
+    const count = getUsageCount(Number(post.Post_ID));
+    if (count > 0) {
+      alert(`Cannot remove "${post.Post_Name}": This designation is currently assigned to ${count} employee(s) in the system. Please update those employee records before removing this designation from your mapping.`);
+      return;
+    }
+    onToggle(Number(post.Post_ID));
+  };
 
   if (isAdmin) {
     return (
@@ -45,18 +59,27 @@ const UserPostSelection: React.FC<UserPostSelectionProps> = ({ data, currentUser
                 <th className="ps-4">Post Name</th>
                 <th>Category</th>
                 <th className="text-center">Class</th>
+                <th>Global Usage</th>
                 <th className="text-end pe-4">Status</th>
               </tr>
             </thead>
             <tbody>
-              {data.posts.map(post => (
-                <tr key={post.Post_ID}>
-                  <td className="ps-4 fw-semibold">{post.Post_Name}</td>
-                  <td><span className="badge bg-light text-dark border">{post.Category}</span></td>
-                  <td className="text-center"><span className="badge badge-soft-primary px-3">Class {post.Class}</span></td>
-                  <td className="text-end pe-4"><span className="text-success small fw-bold">Active</span></td>
-                </tr>
-              ))}
+              {data.posts.map(post => {
+                const count = getUsageCount(Number(post.Post_ID));
+                return (
+                  <tr key={post.Post_ID}>
+                    <td className="ps-4 fw-semibold">{post.Post_Name}</td>
+                    <td><span className="badge bg-light text-dark border">{post.Category}</span></td>
+                    <td className="text-center"><span className="badge badge-soft-primary px-3">Class {post.Class}</span></td>
+                    <td>
+                      <span className={`small fw-bold ${count > 0 ? 'text-primary' : 'text-muted'}`}>
+                        {count} Employees
+                      </span>
+                    </td>
+                    <td className="text-end pe-4"><span className="text-success small fw-bold">Active</span></td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -80,48 +103,54 @@ const UserPostSelection: React.FC<UserPostSelectionProps> = ({ data, currentUser
         <div className="card-body bg-light-subtle p-4">
           {selectedPosts.length > 0 ? (
             <div className="row g-3">
-              {selectedPosts.map(post => (
-                <div key={post.Post_ID} className="col-12 col-md-6 col-lg-4">
-                  <div className="card border-0 shadow-sm rounded-3 h-100 selection-chip bg-white overflow-hidden">
-                    <div className="card-body p-3 d-flex align-items-center justify-content-between gap-2">
-                      <div className="d-flex align-items-center gap-2 flex-grow-1 min-width-0">
-                        <div className="bg-primary-subtle text-primary rounded-circle p-2 flex-shrink-0 d-flex align-items-center justify-content-center" style={{width: '32px', height: '32px'}}>
-                          <Briefcase size={16} />
-                        </div>
-                        
-                        <div className="min-width-0">
-                          <div className="fw-bold small text-truncate text-dark" title={post.Post_Name}>
-                            {post.Post_Name}
+              {selectedPosts.map(post => {
+                const usageCount = getUsageCount(Number(post.Post_ID));
+                const isLocked = usageCount > 0;
+                
+                return (
+                  <div key={post.Post_ID} className="col-12 col-md-6 col-lg-4">
+                    <div className="card border-0 shadow-sm rounded-3 h-100 selection-chip bg-white overflow-hidden">
+                      <div className="card-body p-3 d-flex align-items-center justify-content-between gap-2">
+                        <div className="d-flex align-items-center gap-2 flex-grow-1 min-width-0">
+                          <div className="bg-primary-subtle text-primary rounded-circle p-2 flex-shrink-0 d-flex align-items-center justify-content-center" style={{width: '32px', height: '32px'}}>
+                            <Briefcase size={16} />
                           </div>
-                          <div className="text-muted text-truncate" style={{fontSize: '0.65rem'}}>
-                            Class {post.Class} • {post.Category}
+                          
+                          <div className="min-width-0">
+                            <div className="fw-bold small text-truncate text-dark" title={post.Post_Name}>
+                              {post.Post_Name}
+                            </div>
+                            <div className="text-muted text-truncate d-flex align-items-center gap-1" style={{fontSize: '0.65rem'}}>
+                              Class {post.Class} • {post.Category}
+                              {isLocked && <span className="text-primary fw-bold ms-1">• In Use ({usageCount})</span>}
+                            </div>
                           </div>
                         </div>
-                      </div>
 
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onToggle(Number(post.Post_ID));
-                        }}
-                        className="btn btn-danger-subtle btn-sm rounded-circle p-1 flex-shrink-0 border-0 hover-action-btn shadow-sm ms-2"
-                        title="Remove Designation"
-                        style={{ 
-                          width: '30px', 
-                          height: '30px', 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          justifyContent: 'center',
-                          position: 'relative',
-                          zIndex: 5
-                        }}
-                      >
-                        <X size={16} strokeWidth={3} />
-                      </button>
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRemove(post);
+                          }}
+                          className={`btn ${isLocked ? 'btn-light text-muted opacity-50' : 'btn-danger-subtle'} btn-sm rounded-circle p-1 flex-shrink-0 border-0 hover-action-btn shadow-sm ms-2`}
+                          title={isLocked ? `Locked: Assigned to ${usageCount} employees` : "Remove Designation"}
+                          style={{ 
+                            width: '30px', 
+                            height: '30px', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'center',
+                            position: 'relative',
+                            zIndex: 5
+                          }}
+                        >
+                          {isLocked ? <Lock size={14} /> : <X size={16} strokeWidth={3} />}
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="text-center py-4">
@@ -229,6 +258,11 @@ const UserPostSelection: React.FC<UserPostSelectionProps> = ({ data, currentUser
           background-color: #ef4444 !important;
           color: white !important;
           transform: scale(1.1);
+        }
+        .btn-light.hover-action-btn:hover {
+          background-color: #e2e8f0 !important;
+          color: #475569 !important;
+          transform: none;
         }
         .min-width-0 { min-width: 0; }
         .sticky-top { top: 0; position: sticky; background: white; }

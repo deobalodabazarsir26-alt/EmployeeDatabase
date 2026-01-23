@@ -29,6 +29,14 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUse
     return counts;
   }, [employees]);
 
+  const serviceCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    employees.forEach(emp => {
+      counts[emp.Service_Type] = (counts[emp.Service_Type] || 0) + 1;
+    });
+    return counts;
+  }, [employees]);
+
   const availablePosts = useMemo(() => {
     const userId = Number(currentUser.User_ID);
     const selections = data.userPostSelections?.[userId] || [];
@@ -135,10 +143,15 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUse
               value={serviceFilter}
               onChange={(e) => setServiceFilter(e.target.value)}
             >
-              <option value="">All Services</option>
-              {Object.values(ServiceType).map(type => (
-                <option key={type} value={type}>{type}</option>
-              ))}
+              <option value="">All Services ({employees.length})</option>
+              {Object.values(ServiceType).map(type => {
+                const count = serviceCounts[type] || 0;
+                return (
+                  <option key={type} value={type}>
+                    {type} ({count})
+                  </option>
+                );
+              })}
             </select>
           </div>
 
