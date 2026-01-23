@@ -82,23 +82,26 @@ const UserPostSelection: React.FC<UserPostSelectionProps> = ({ data, currentUser
             <div className="row g-3">
               {selectedPosts.map(post => (
                 <div key={post.Post_ID} className="col-12 col-md-6 col-lg-4">
-                  <div className="card border-0 shadow-sm rounded-3 h-100 selection-chip position-relative overflow-hidden bg-white">
-                    <div className="card-body p-3 d-flex align-items-center justify-content-between">
-                      <div className="d-flex align-items-center gap-3">
-                        <div className="bg-primary rounded-circle p-2 text-white">
-                          <Briefcase size={14} />
+                  <div className="card border-0 shadow-sm rounded-3 h-100 selection-chip bg-white overflow-hidden">
+                    <div className="card-body p-3 d-flex align-items-center gap-2">
+                      <div className="bg-primary-subtle text-primary rounded-circle p-2 flex-shrink-0 d-flex align-items-center justify-content-center" style={{width: '32px', height: '32px'}}>
+                        <Briefcase size={16} />
+                      </div>
+                      
+                      <div className="flex-grow-1 min-width-0">
+                        <div className="fw-bold small text-truncate text-dark" title={post.Post_Name}>
+                          {post.Post_Name}
                         </div>
-                        <div>
-                          <div className="fw-bold small text-truncate" style={{maxWidth: '150px'}} title={post.Post_Name}>
-                            {post.Post_Name}
-                          </div>
-                          <div className="text-muted" style={{fontSize: '0.65rem'}}>Class {post.Class} • {post.Category}</div>
+                        <div className="text-muted text-truncate" style={{fontSize: '0.65rem'}}>
+                          Class {post.Class} • {post.Category}
                         </div>
                       </div>
+
                       <button 
                         onClick={() => onToggle(Number(post.Post_ID))}
-                        className="btn btn-outline-danger btn-sm rounded-circle p-1 border-0 hover-bg-danger shadow-none"
+                        className="btn btn-danger-subtle btn-sm rounded-circle p-1 flex-shrink-0 border-0 hover-action-btn"
                         title="Remove Designation"
+                        style={{ width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                       >
                         <X size={16} />
                       </button>
@@ -205,10 +208,16 @@ const UserPostSelection: React.FC<UserPostSelectionProps> = ({ data, currentUser
           transform: translateY(-2px);
           box-shadow: 0 4px 12px rgba(0,0,0,0.05) !important;
         }
-        .hover-bg-danger:hover {
-          background-color: #fee2e2 !important;
-          color: #dc2626 !important;
+        .btn-danger-subtle {
+          background-color: #fee2e2;
+          color: #dc2626;
         }
+        .hover-action-btn:hover {
+          background-color: #fca5a5 !important;
+          color: #b91c1c !important;
+          transform: scale(1.1);
+        }
+        .min-width-0 { min-width: 0; }
         .sticky-top { top: 0; }
         .bg-light-subtle { background-color: #f8fafc; }
       `}</style>

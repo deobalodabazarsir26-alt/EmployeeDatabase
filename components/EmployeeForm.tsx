@@ -23,7 +23,12 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [availableOffices, setAvailableOffices] = useState(data.offices || []);
-  const [availableBranches, setAvailableBranches] = useState(data.branches || []);
+  const [availableBranches, setAvailableBranches] = useState(() => {
+    if (employee?.Bank_ID && data.branches) {
+      return data.branches.filter(b => Number(b.Bank_ID) === Number(employee.Bank_ID));
+    }
+    return data.branches || [];
+  });
 
   const selections = data.userPostSelections || {};
   const rawSelections = selections[currentUser.User_ID];
@@ -35,16 +40,17 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
     : posts.filter(p => userPostSelections.includes(p.Post_ID));
 
   useEffect(() => {
-    if (formData.Department_ID && data.offices) {
-      setAvailableOffices(data.offices.filter(o => o.Department_ID === Number(formData.Department_ID)));
+    if (formData.Department_ID !== undefined && formData.Department_ID !== '' && data.offices) {
+      setAvailableOffices(data.offices.filter(o => Number(o.Department_ID) === Number(formData.Department_ID)));
     } else {
       setAvailableOffices(data.offices || []);
     }
   }, [formData.Department_ID, data.offices]);
 
   useEffect(() => {
-    if (formData.Bank_ID && data.branches) {
-      setAvailableBranches(data.branches.filter(b => b.Bank_ID === Number(formData.Bank_ID)));
+    if (formData.Bank_ID !== undefined && formData.Bank_ID !== '' && data.branches) {
+      const filtered = data.branches.filter(b => Number(b.Bank_ID) === Number(formData.Bank_ID));
+      setAvailableBranches(filtered);
     } else {
       setAvailableBranches(data.branches || []);
     }
@@ -85,12 +91,12 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
       newErrors.ACC_No = "Enter a valid account number (9-18 digits)";
     }
 
-    if (!formData.Department_ID) newErrors.Department_ID = "Please select a department";
-    if (!formData.Office_ID) newErrors.Office_ID = "Please select an office";
-    if (!formData.Post_ID) newErrors.Post_ID = "Please select a post";
-    if (!formData.Pay_ID) newErrors.Pay_ID = "Please select a payscale";
-    if (!formData.Bank_ID) newErrors.Bank_ID = "Please select a bank";
-    if (!formData.Branch_ID) newErrors.Branch_ID = "Please select a branch";
+    if (formData.Department_ID === undefined || formData.Department_ID === '') newErrors.Department_ID = "Please select a department";
+    if (formData.Office_ID === undefined || formData.Office_ID === '') newErrors.Office_ID = "Please select an office";
+    if (formData.Post_ID === undefined || formData.Post_ID === '') newErrors.Post_ID = "Please select a post";
+    if (formData.Pay_ID === undefined || formData.Pay_ID === '') newErrors.Pay_ID = "Please select a payscale";
+    if (formData.Bank_ID === undefined || formData.Bank_ID === '') newErrors.Bank_ID = "Please select a bank";
+    if (formData.Branch_ID === undefined || formData.Branch_ID === '') newErrors.Branch_ID = "Please select a branch";
     if (!formData.DOB) newErrors.DOB = "Date of birth is required";
     if (!formData.EPIC?.trim()) newErrors.EPIC = "EPIC number is required";
 
@@ -121,12 +127,36 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
     let finalValue: any = value;
     if (name.includes('ID') || name === 'AC_No' || name === 'Employee_ID') finalValue = value === '' ? '' : Number(value);
     
-    // Reset DA_Reason if status is back to Yes
+    // Logic for Status Change
     if (name === 'Active' && value === 'Yes') {
       setFormData(prev => ({ ...prev, [name]: finalValue, DA_Reason: '' }));
-    } else {
-      setFormData(prev => ({ ...prev, [name]: finalValue }));
+      return;
     }
+
+    // Logic for Bank Change: Reset Branch and IFSC if bank changes
+    if (name === 'Bank_ID') {
+      setFormData(prev => ({ 
+        ...prev, 
+        [name]: finalValue, 
+        Branch_ID: '', 
+        IFSC_Code: '' 
+      }));
+      return;
+    }
+
+    // Logic for Branch Change: Auto-populate IFSC
+    if (name === 'Branch_ID') {
+      const branchId = value === '' ? null : Number(value);
+      const branch = (data.branches || []).find(b => Number(b.Branch_ID) === branchId);
+      setFormData(prev => ({ 
+        ...prev, 
+        [name]: finalValue, 
+        IFSC_Code: branch ? branch.IFSC_Code : '' 
+      }));
+      return;
+    }
+
+    setFormData(prev => ({ ...prev, [name]: finalValue }));
 
     if (errors[name]) {
       setErrors(prev => {
@@ -134,11 +164,6 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
         delete updated[name];
         return updated;
       });
-    }
-
-    if (name === 'Branch_ID') {
-      const branch = (data.branches || []).find(b => b.Branch_ID === Number(value));
-      if (branch) setFormData(prev => ({ ...prev, IFSC_Code: branch.IFSC_Code }));
     }
   };
 
@@ -280,7 +305,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
           <select 
             required 
             name="Department_ID" 
-            value={formData.Department_ID || ''} 
+            value={formData.Department_ID ?? ''} 
             onChange={handleChange} 
             className={`form-select ${errors.Department_ID ? 'is-invalid' : ''}`}
           >
@@ -294,7 +319,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
           <select 
             required 
             name="Office_ID" 
-            value={formData.Office_ID || ''} 
+            value={formData.Office_ID ?? ''} 
             onChange={handleChange} 
             className={`form-select ${errors.Office_ID ? 'is-invalid' : ''}`}
           >
@@ -308,7 +333,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
           <select 
             required 
             name="Post_ID" 
-            value={formData.Post_ID || ''} 
+            value={formData.Post_ID ?? ''} 
             onChange={handleChange} 
             className={`form-select ${errors.Post_ID ? 'is-invalid' : ''}`}
           >
@@ -322,7 +347,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
           <select 
             required 
             name="Pay_ID" 
-            value={formData.Pay_ID || ''} 
+            value={formData.Pay_ID ?? ''} 
             onChange={handleChange} 
             className={`form-select ${errors.Pay_ID ? 'is-invalid' : ''}`}
           >
@@ -387,7 +412,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
           <select 
             required
             name="Bank_ID" 
-            value={formData.Bank_ID || ''} 
+            value={formData.Bank_ID ?? ''} 
             onChange={handleChange} 
             className={`form-select ${errors.Bank_ID ? 'is-invalid' : ''}`}
           >
@@ -401,7 +426,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
           <select 
             required
             name="Branch_ID" 
-            value={formData.Branch_ID || ''} 
+            value={formData.Branch_ID ?? ''} 
             onChange={handleChange} 
             className={`form-select ${errors.Branch_ID ? 'is-invalid' : ''}`}
           >

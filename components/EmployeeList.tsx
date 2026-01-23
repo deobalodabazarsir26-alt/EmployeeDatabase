@@ -1,37 +1,25 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Employee, AppData, ServiceType, User, UserType } from '../types';
-import { Search, Plus, Edit2, Trash2, Filter, ChevronLeft, ChevronRight, XCircle, Briefcase, Info, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Search, Plus, Edit2, Filter, ChevronLeft, ChevronRight, XCircle, Briefcase, Info, AlertTriangle, CheckCircle2 } from 'lucide-react';
 
 interface EmployeeListProps {
   employees: Employee[];
   data: AppData;
   currentUser: User;
   onEdit: (emp: Employee) => void;
-  onDelete: (id: number) => void;
   onAddNew: () => void;
 }
 
 const ITEMS_PER_PAGE = 10;
 
-const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUser, onEdit, onDelete, onAddNew }) => {
+const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUser, onEdit, onAddNew }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [postFilter, setPostFilter] = useState<string>('');
   const [serviceFilter, setServiceFilter] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
 
-  // Calculate counts for each service type based on total employees available to this user
-  const serviceTypeCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    employees.forEach(emp => {
-      const type = emp.Service_Type;
-      counts[type] = (counts[type] || 0) + 1;
-    });
-    return counts;
-  }, [employees]);
-
-  // Calculate counts for each designation (post) based on total employees available to this user
   const postCounts = useMemo(() => {
     const counts: Record<number, number> = {};
     employees.forEach(emp => {
@@ -41,19 +29,13 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUse
     return counts;
   }, [employees]);
 
-  // Filter available posts for the dropdown BASED ON UserPostSelections for the LOGGED-IN user
   const availablePosts = useMemo(() => {
     const userId = Number(currentUser.User_ID);
     const selections = data.userPostSelections?.[userId] || [];
-    
-    // Admins see all system posts as the master authority
     if (currentUser.User_Type === UserType.ADMIN) return data.posts;
-    
-    // Normal users see ONLY the posts they have mapped in the "Manage My Posts" section
     return data.posts.filter(p => selections.includes(Number(p.Post_ID)));
   }, [data.posts, data.userPostSelections, currentUser]);
 
-  // Reset to first page when filters change to avoid empty results on non-existent pages
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, postFilter, serviceFilter, statusFilter]);
@@ -238,14 +220,9 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUse
                     <div className="small text-muted" style={{fontSize: '0.75rem'}}>{payscale}</div>
                   </td>
                   <td className="text-end pe-4">
-                    <div className="btn-group">
-                      <button onClick={() => onEdit(emp)} className="btn btn-light btn-sm rounded-3 me-2 text-primary shadow-sm border">
-                        <Edit2 size={16} />
-                      </button>
-                      <button onClick={() => onDelete(emp.Employee_ID)} className="btn btn-light btn-sm rounded-3 text-danger shadow-sm border">
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
+                    <button onClick={() => onEdit(emp)} className="btn btn-light btn-sm rounded-3 text-primary shadow-sm border px-3">
+                      <Edit2 size={16} className="me-1" /> Edit
+                    </button>
                   </td>
                 </tr>
               );

@@ -50,13 +50,13 @@ export default function App() {
       setIsLoading(true);
       const remoteData = await syncService.fetchAllData();
       if (remoteData) {
-        // Advanced Sanitization: Recursively convert anything ending in _ID to a safe Number
         const sanitizeTable = (table: any[]) => {
           if (!Array.isArray(table)) return [];
           return table.map(item => {
             const newItem = { ...item };
             Object.keys(newItem).forEach(key => {
-              if (key.endsWith('_ID') || key === 'AC_No' || key === 'Bank_ID' || key === 'User_ID' || key === 'Post_ID') {
+              const k = key.toLowerCase();
+              if (k.endsWith('_id') || k === 'ac_no' || k === 'bank_id' || k === 'user_id' || k === 'post_id' || k === 'pay_id' || k === 'department_id' || k === 'office_id' || k === 'branch_id') {
                 if (newItem[key] !== undefined && newItem[key] !== null && newItem[key] !== '') {
                   newItem[key] = Number(newItem[key]);
                 }
@@ -71,12 +71,13 @@ export default function App() {
         sanitizedData.departments = sanitizeTable(remoteData.departments || []);
         sanitizedData.offices = sanitizeTable(remoteData.offices || []);
         sanitizedData.banks = sanitizeTable(remoteData.banks || []);
-        sanitizedData.branches = sanitizeTable(remoteData.branches || []);
+        // Prioritize 'branches', then fallback to 'bank_branchs' from Apps Script
+        const rawBranches = remoteData.branches || (remoteData as any).bank_branchs || [];
+        sanitizedData.branches = sanitizeTable(rawBranches);
         sanitizedData.posts = sanitizeTable(remoteData.posts || []);
         sanitizedData.payscales = sanitizeTable(remoteData.payscales || []);
         sanitizedData.employees = sanitizeTable(remoteData.employees || []);
 
-        // Robust Sanitization for UserPostSelections (The relational mapping)
         const rawSelections = (remoteData.userPostSelections || {}) as Record<string, any>;
         const sanitizedSelections: Record<number, number[]> = {};
         
@@ -154,14 +155,6 @@ export default function App() {
     performSync('upsertEmployee', newEmp, newState);
     setActiveTab('employees');
     setEditingEmployee(null);
-  };
-
-  const deleteEmployee = (id: number) => {
-    if (confirm('Are you sure you want to delete this employee?')) {
-      const newEmployees = (data.employees || []).filter(e => Number(e.Employee_ID) !== Number(id));
-      const newState = { ...data, employees: newEmployees };
-      performSync('deleteEmployee', { Employee_ID: id }, newState);
-    }
   };
 
   const upsertOffice = (office: Office) => {
@@ -244,7 +237,7 @@ export default function App() {
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard': return <Dashboard employees={filteredEmployees} data={data} />;
-      case 'employees': return <EmployeeList employees={filteredEmployees} data={data} currentUser={currentUser} onEdit={(emp) => { setEditingEmployee(emp); setActiveTab('employeeForm'); }} onDelete={deleteEmployee} onAddNew={() => { setEditingEmployee(null); setActiveTab('employeeForm'); }} />;
+      case 'employees': return <EmployeeList employees={filteredEmployees} data={data} currentUser={currentUser} onEdit={(emp) => { setEditingEmployee(emp); setActiveTab('employeeForm'); }} onAddNew={() => { setEditingEmployee(null); setActiveTab('employeeForm'); }} />;
       case 'employeeForm': return <EmployeeForm employee={editingEmployee} data={data} currentUser={currentUser} onSave={upsertEmployee} onCancel={() => setActiveTab('employees')} />;
       case 'offices': return <OfficeManagement data={data} onSaveOffice={upsertOffice} />;
       case 'banks': return <BankManagement data={data} onSaveBank={upsertBank} onSaveBranch={upsertBranch} />;

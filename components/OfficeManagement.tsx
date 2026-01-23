@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Office, AppData } from '../types';
-import { Plus, Edit2, Trash2, Building2, MapPin, Hash, UserCheck, X, Save, AlertCircle } from 'lucide-react';
+import { Plus, Edit2, Building2, MapPin, Hash, UserCheck, X, Save } from 'lucide-react';
 
 interface OfficeManagementProps {
   data: AppData;

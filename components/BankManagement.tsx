@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Bank, BankBranch, AppData } from '../types';
-import { Plus, Landmark, Building, Trash2, Hash, CreditCard, Save, MapPin } from 'lucide-react';
+import { Plus, Landmark, Building, Hash, Save, MapPin } from 'lucide-react';
 
 interface BankManagementProps {
   data: AppData;
@@ -31,7 +31,6 @@ const BankManagement: React.FC<BankManagementProps> = ({ data, onSaveBank, onSav
 
   return (
     <div className="row g-4">
-      {/* Banks Section */}
       <div className="col-lg-5">
         <div className="card shadow-sm border-0 rounded-4 h-100">
           <div className="card-header bg-white border-bottom py-3">
@@ -79,7 +78,6 @@ const BankManagement: React.FC<BankManagementProps> = ({ data, onSaveBank, onSav
         </div>
       </div>
 
-      {/* Branches Section */}
       <div className="col-lg-7">
         <div className="card shadow-sm border-0 rounded-4">
           <div className="card-header bg-white border-bottom py-3">
