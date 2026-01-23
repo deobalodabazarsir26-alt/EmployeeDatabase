@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Employee, AppData, ServiceType, User, UserType } from '../types';
-import { Save, X, Info, User as UserIcon, Briefcase, Landmark, AlertCircle } from 'lucide-react';
+import { Save, X, Info, User as UserIcon, Briefcase, Landmark, AlertCircle, Hash } from 'lucide-react';
 
 interface EmployeeFormProps {
   employee: Employee | null;
@@ -23,7 +23,6 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
   const [availableBranches, setAvailableBranches] = useState(data.branches || []);
 
   const selections = data.userPostSelections || {};
-  // Fix: Defensive check to ensure userPostSelections is always an array
   const rawSelections = selections[currentUser.User_ID];
   const userPostSelections = Array.isArray(rawSelections) ? rawSelections : [];
   const posts = data.posts || [];
@@ -50,6 +49,24 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
+    
+    // Employee ID Validation
+    const idValue = Number(formData.Employee_ID);
+    if (!formData.Employee_ID && formData.Employee_ID !== 0) {
+      newErrors.Employee_ID = "Employee ID is required";
+    } else if (isNaN(idValue) || idValue <= 0) {
+      newErrors.Employee_ID = "Employee ID must be a positive number";
+    } else {
+      // Check for uniqueness
+      const isDuplicate = data.employees.some(e => 
+        Number(e.Employee_ID) === idValue && 
+        (!employee || Number(employee.Employee_ID) !== Number(e.Employee_ID))
+      );
+      if (isDuplicate) {
+        newErrors.Employee_ID = "This Employee ID is already assigned to another record";
+      }
+    }
+
     if (!formData.Employee_Name?.trim()) newErrors.Employee_Name = "First name is required";
     if (!formData.Employee_Surname?.trim()) newErrors.Employee_Surname = "Surname is required";
     
@@ -88,7 +105,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     let finalValue: any = value;
-    if (name.includes('ID') || name === 'AC_No') finalValue = Number(value);
+    if (name.includes('ID') || name === 'AC_No' || name === 'Employee_ID') finalValue = value === '' ? '' : Number(value);
     
     setFormData(prev => ({ ...prev, [name]: finalValue }));
 
@@ -130,6 +147,23 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
           <div className="d-flex align-items-center gap-2 mb-3 text-primary fw-bold border-start border-4 border-primary ps-3">
             <UserIcon size={18} /> Personal Information
           </div>
+        </div>
+
+        <div className="col-md-4">
+          <label className="form-label small fw-bold">Employee ID *</label>
+          <div className="input-group">
+            <span className="input-group-text bg-light border-end-0 text-muted"><Hash size={14} /></span>
+            <input 
+              type="number"
+              required 
+              name="Employee_ID" 
+              value={formData.Employee_ID ?? ''} 
+              onChange={handleChange} 
+              className={`form-control bg-light border-start-0 ps-0 ${errors.Employee_ID ? 'is-invalid' : ''}`} 
+              placeholder="e.g. 1001" 
+            />
+          </div>
+          <div className="text-danger small mt-1" style={{fontSize: '0.7rem'}}>{errors.Employee_ID}</div>
         </div>
 
         <div className="col-md-4">
@@ -271,8 +305,9 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
         <div className="col-md-4">
           <label className="form-label small fw-bold">Service Type</label>
           <select name="Service_Type" value={formData.Service_Type} onChange={handleChange} className="form-select">
-            <option value={ServiceType.REGULAR}>{ServiceType.REGULAR}</option>
-            <option value={ServiceType.IRREGULAR}>{ServiceType.IRREGULAR}</option>
+            {Object.values(ServiceType).map(type => (
+              <option key={type} value={type}>{type}</option>
+            ))}
           </select>
         </div>
 

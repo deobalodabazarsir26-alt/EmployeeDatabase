@@ -19,7 +19,7 @@ export default function App() {
       const savedUser = localStorage.getItem('ems_user');
       if (savedUser) {
         const parsed = JSON.parse(savedUser);
-        if (parsed && typeof parsed.User_ID !== 'number') {
+        if (parsed && parsed.User_ID !== undefined) {
           parsed.User_ID = Number(parsed.User_ID);
         }
         return parsed;
@@ -50,13 +50,13 @@ export default function App() {
       setIsLoading(true);
       const remoteData = await syncService.fetchAllData();
       if (remoteData) {
-        // Robust Data Sanitization: Convert all string-based IDs from Google Sheets to Numbers
-        const sanitizeTable = (table: any[], idKey: string) => {
+        // Advanced Sanitization: Recursively convert anything ending in _ID to a safe Number
+        const sanitizeTable = (table: any[]) => {
           if (!Array.isArray(table)) return [];
           return table.map(item => {
             const newItem = { ...item };
             Object.keys(newItem).forEach(key => {
-              if (key === idKey || key.endsWith('_ID') || key === 'AC_No') {
+              if (key.endsWith('_ID') || key === 'AC_No' || key === 'Bank_ID' || key === 'User_ID' || key === 'Post_ID') {
                 if (newItem[key] !== undefined && newItem[key] !== null && newItem[key] !== '') {
                   newItem[key] = Number(newItem[key]);
                 }
@@ -67,24 +67,26 @@ export default function App() {
         };
 
         const sanitizedData: any = { ...remoteData };
-        sanitizedData.users = sanitizeTable(remoteData.users, 'User_ID');
-        sanitizedData.departments = sanitizeTable(remoteData.departments, 'Department_ID');
-        sanitizedData.offices = sanitizeTable(remoteData.offices, 'Office_ID');
-        sanitizedData.banks = sanitizeTable(remoteData.banks, 'Bank_ID');
-        sanitizedData.branches = sanitizeTable(remoteData.branches, 'Branch_ID');
-        sanitizedData.posts = sanitizeTable(remoteData.posts, 'Post_ID');
-        sanitizedData.payscales = sanitizeTable(remoteData.payscales, 'Pay_ID');
-        sanitizedData.employees = sanitizeTable(remoteData.employees, 'Employee_ID');
+        sanitizedData.users = sanitizeTable(remoteData.users || []);
+        sanitizedData.departments = sanitizeTable(remoteData.departments || []);
+        sanitizedData.offices = sanitizeTable(remoteData.offices || []);
+        sanitizedData.banks = sanitizeTable(remoteData.banks || []);
+        sanitizedData.branches = sanitizeTable(remoteData.branches || []);
+        sanitizedData.posts = sanitizeTable(remoteData.posts || []);
+        sanitizedData.payscales = sanitizeTable(remoteData.payscales || []);
+        sanitizedData.employees = sanitizeTable(remoteData.employees || []);
 
-        // Sanitize UserPostSelections Mapping
+        // Robust Sanitization for UserPostSelections (The relational mapping)
         const rawSelections = (remoteData.userPostSelections || {}) as Record<string, any>;
         const sanitizedSelections: Record<number, number[]> = {};
         
         Object.keys(rawSelections).forEach(key => {
-          const val = rawSelections[key];
           const numericKey = Number(key);
           if (!isNaN(numericKey)) {
-            sanitizedSelections[numericKey] = Array.isArray(val) ? val.map(Number).filter(v => !isNaN(v)) : [];
+            const val = rawSelections[key];
+            sanitizedSelections[numericKey] = Array.isArray(val) 
+              ? val.map(v => Number(v)).filter(v => !isNaN(v)) 
+              : [];
           }
         });
 
@@ -120,8 +122,8 @@ export default function App() {
     if (currentUser.User_Type === UserType.ADMIN) return employees;
     const userOfficeIds = (data.offices || [])
       .filter(o => Number(o.User_ID) === Number(currentUser.User_ID))
-      .map(o => o.Office_ID);
-    return employees.filter(e => userOfficeIds.includes(e.Office_ID));
+      .map(o => Number(o.Office_ID));
+    return employees.filter(e => userOfficeIds.includes(Number(e.Office_ID)));
   }, [currentUser, data.employees, data.offices]);
 
   const performSync = async (action: string, payload: any, newState: AppData) => {
@@ -142,10 +144,10 @@ export default function App() {
 
   const upsertEmployee = (employee: Employee) => {
     const employees = data.employees || [];
-    const exists = employees.find(e => e.Employee_ID === employee.Employee_ID);
+    const exists = employees.find(e => Number(e.Employee_ID) === Number(employee.Employee_ID));
     const newEmp = exists ? employee : { ...employee, Employee_ID: Date.now() };
     const newEmployees = exists
-      ? employees.map(e => e.Employee_ID === employee.Employee_ID ? employee : e)
+      ? employees.map(e => Number(e.Employee_ID) === Number(employee.Employee_ID) ? employee : e)
       : [...employees, newEmp];
     
     const newState = { ...data, employees: newEmployees };
@@ -156,7 +158,7 @@ export default function App() {
 
   const deleteEmployee = (id: number) => {
     if (confirm('Are you sure you want to delete this employee?')) {
-      const newEmployees = (data.employees || []).filter(e => e.Employee_ID !== id);
+      const newEmployees = (data.employees || []).filter(e => Number(e.Employee_ID) !== Number(id));
       const newState = { ...data, employees: newEmployees };
       performSync('deleteEmployee', { Employee_ID: id }, newState);
     }
@@ -164,10 +166,10 @@ export default function App() {
 
   const upsertOffice = (office: Office) => {
     const offices = data.offices || [];
-    const exists = offices.find(o => o.Office_ID === office.Office_ID);
+    const exists = offices.find(o => Number(o.Office_ID) === Number(office.Office_ID));
     const newOff = exists ? office : { ...office, Office_ID: Date.now() };
     const newOffices = exists
-      ? offices.map(o => o.Office_ID === office.Office_ID ? office : o)
+      ? offices.map(o => Number(o.Office_ID) === Number(office.Office_ID) ? office : o)
       : [...offices, newOff];
     
     performSync('upsertOffice', newOff, { ...data, offices: newOffices });
@@ -175,10 +177,10 @@ export default function App() {
 
   const upsertBank = (bank: Bank) => {
     const banks = data.banks || [];
-    const exists = banks.find(b => b.Bank_ID === bank.Bank_ID);
+    const exists = banks.find(b => Number(b.Bank_ID) === Number(bank.Bank_ID));
     const newBk = exists ? bank : { ...bank, Bank_ID: Date.now() };
     const newBanks = exists
-      ? banks.map(b => b.Bank_ID === bank.Bank_ID ? bank : b)
+      ? banks.map(b => Number(b.Bank_ID) === Number(bank.Bank_ID) ? bank : b)
       : [...banks, newBk];
     
     performSync('upsertBank', newBk, { ...data, banks: newBanks });
@@ -186,10 +188,10 @@ export default function App() {
 
   const upsertBranch = (branch: BankBranch) => {
     const branches = data.branches || [];
-    const exists = branches.find(b => b.Branch_ID === branch.Branch_ID);
+    const exists = branches.find(b => Number(b.Branch_ID) === Number(branch.Branch_ID));
     const newBr = exists ? branch : { ...branch, Branch_ID: Date.now() };
     const newBranches = exists
-      ? branches.map(b => b.Branch_ID === branch.Branch_ID ? branch : b)
+      ? branches.map(b => Number(b.Branch_ID) === Number(branch.Branch_ID) ? branch : b)
       : [...branches, newBr];
     
     performSync('upsertBranch', newBr, { ...data, branches: newBranches });
@@ -198,19 +200,20 @@ export default function App() {
   const handleTogglePostSelection = (postId: number) => {
     if (!currentUser) return;
     const selections = data.userPostSelections || {};
-    const rawSelections = selections[currentUser.User_ID];
+    const userId = Number(currentUser.User_ID);
+    const rawSelections = selections[userId];
     const currentSelections = Array.isArray(rawSelections) ? rawSelections : [];
     
-    const isSelected = currentSelections.includes(postId);
+    const isSelected = currentSelections.includes(Number(postId));
     const newSelections = isSelected 
-      ? currentSelections.filter(id => id !== postId)
-      : [...currentSelections, postId];
+      ? currentSelections.filter(id => Number(id) !== Number(postId))
+      : [...currentSelections, Number(postId)];
     
     const newState = {
       ...data,
-      userPostSelections: { ...selections, [currentUser.User_ID]: newSelections }
+      userPostSelections: { ...selections, [userId]: newSelections }
     };
-    performSync('updatePostSelections', { User_ID: currentUser.User_ID, Post_IDs: newSelections }, newState);
+    performSync('updatePostSelections', { User_ID: userId, Post_IDs: newSelections }, newState);
   };
 
   const handleLogin = (user: User) => {
@@ -232,8 +235,8 @@ export default function App() {
     return (
       <div className="min-vh-100 d-flex flex-column align-items-center justify-content-center bg-light">
         <RefreshCw size={48} className="text-primary mb-3 spin-animate" />
-        <h5 className="fw-bold">Synchronizing with Google Sheets...</h5>
-        <p className="text-muted small">Accessing remote database</p>
+        <h5 className="fw-bold">Synchronizing with Cloud...</h5>
+        <p className="text-muted small">Loading Post Mappings & Employee Records</p>
       </div>
     );
   }
@@ -261,7 +264,7 @@ export default function App() {
               {activeTab === 'managePosts' ? 'Post Configuration' : activeTab.replace(/([A-Z])/g, ' $1')}
             </h1>
             <div className="d-flex align-items-center gap-2">
-              <p className="text-muted small mb-0">Portal Management & Analytics</p>
+              <p className="text-muted small mb-0">Google Sheets Live Sync</p>
               {!GSHEET_API_URL && <span className="badge bg-warning text-dark" style={{fontSize: '0.6rem'}}>OFFLINE MODE</span>}
             </div>
           </div>
@@ -276,7 +279,7 @@ export default function App() {
                   <CheckCircle size={12} className="text-success" />
                 )}
                 <span className="text-muted" style={{fontSize: '0.7rem'}}>
-                  {isSyncing ? 'Syncing...' : syncError ? 'Sync Failed' : 'Cloud Sync Active'}
+                  {isSyncing ? 'Syncing...' : syncError ? 'Sync Failed' : 'Database Online'}
                 </span>
               </div>
             )}
@@ -286,7 +289,7 @@ export default function App() {
                 {currentUser.User_Type}
               </span>
             </div>
-            <button onClick={handleLogout} className="btn btn-outline-danger btn-sm rounded-circle p-2">
+            <button onClick={handleLogout} className="btn btn-outline-danger btn-sm rounded-circle p-2 shadow-sm">
               <LogOut size={18} />
             </button>
           </div>

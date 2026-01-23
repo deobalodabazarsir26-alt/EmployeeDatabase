@@ -51,7 +51,12 @@ export interface Payscale {
 
 export enum ServiceType {
   REGULAR = 'नियमित',
-  IRREGULAR = 'अनियमित'
+  CONTRACT = 'संविदा',
+  COLLECTOR_RATE = 'कलेक्टर दर',
+  AD_HOC = 'तदर्थ',
+  DAILY_WAGE = 'दैनिक वेतन भोगी',
+  PLACEMENT = 'प्लेसमेंट निजी कंपनी/ ठेकेदार के कर्मी',
+  RETIRED = 'सेवानिवृत्त'
 }
 
 export interface Employee {

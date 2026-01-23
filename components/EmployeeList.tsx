@@ -20,27 +20,53 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUse
   const [serviceFilter, setServiceFilter] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
 
-  // Filter available posts for the dropdown based on UserPostSelections from mapping sheet
+  // Calculate counts for each service type based on total employees available to this user
+  const serviceTypeCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    employees.forEach(emp => {
+      const type = emp.Service_Type;
+      counts[type] = (counts[type] || 0) + 1;
+    });
+    return counts;
+  }, [employees]);
+
+  // Calculate counts for each designation (post) based on total employees available to this user
+  const postCounts = useMemo(() => {
+    const counts: Record<number, number> = {};
+    employees.forEach(emp => {
+      const pId = Number(emp.Post_ID);
+      counts[pId] = (counts[pId] || 0) + 1;
+    });
+    return counts;
+  }, [employees]);
+
+  // Filter available posts for the dropdown BASED ON UserPostSelections for the LOGGED-IN user
   const availablePosts = useMemo(() => {
-    const selections = data.userPostSelections?.[currentUser.User_ID] || [];
-    // Admins see all posts, Normal users only see their mapped posts
+    const userId = Number(currentUser.User_ID);
+    const selections = data.userPostSelections?.[userId] || [];
+    
+    // Admins see all system posts as the master authority
     if (currentUser.User_Type === UserType.ADMIN) return data.posts;
-    return data.posts.filter(p => selections.includes(p.Post_ID));
+    
+    // Normal users see ONLY the posts they have mapped in the "Manage My Posts" section
+    // We filter the global posts list by the IDs present in the user's selections
+    return data.posts.filter(p => selections.includes(Number(p.Post_ID)));
   }, [data.posts, data.userPostSelections, currentUser]);
 
-  // Reset to first page when filters change
+  // Reset to first page when filters change to avoid empty results on non-existent pages
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, postFilter, serviceFilter]);
 
   const filtered = useMemo(() => {
     return employees.filter(emp => {
+      const fullName = `${emp.Employee_Name} ${emp.Employee_Surname}`.toLowerCase();
       const matchesSearch = 
-        `${emp.Employee_Name} ${emp.Employee_Surname}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        fullName.includes(searchTerm.toLowerCase()) ||
         emp.EPIC.toLowerCase().includes(searchTerm.toLowerCase()) ||
         emp.Mobile.includes(searchTerm);
       
-      const matchesPost = postFilter === '' || emp.Post_ID === Number(postFilter);
+      const matchesPost = postFilter === '' || Number(emp.Post_ID) === Number(postFilter);
       const matchesService = serviceFilter === '' || emp.Service_Type === serviceFilter;
 
       return matchesSearch && matchesPost && matchesService;
@@ -69,10 +95,10 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUse
         <div className="d-flex justify-content-between align-items-center mb-4">
           <h5 className="fw-bold mb-0 d-flex align-items-center gap-2">
             <Filter size={20} className="text-primary" />
-            Advanced Data Filtering
+            Employee Directory
           </h5>
           <button onClick={onAddNew} className="btn btn-primary d-inline-flex align-items-center gap-2 shadow-sm">
-            <Plus size={18} /> Add New Employee
+            <Plus size={18} /> Add New Record
           </button>
         </div>
 
@@ -102,10 +128,19 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUse
                 value={postFilter}
                 onChange={(e) => setPostFilter(e.target.value)}
               >
-                <option value="">{availablePosts.length === 0 ? 'No Designations Selected' : 'All My Designations'}</option>
-                {availablePosts.map(post => (
-                  <option key={post.Post_ID} value={post.Post_ID}>{post.Post_Name}</option>
-                ))}
+                <option value="">
+                  {availablePosts.length === 0 
+                    ? 'No Mapped Designations' 
+                    : `All Mapped Designations (${employees.length})`}
+                </option>
+                {availablePosts.map(post => {
+                  const count = postCounts[Number(post.Post_ID)] || 0;
+                  return (
+                    <option key={post.Post_ID} value={post.Post_ID}>
+                      {post.Post_Name} ({count})
+                    </option>
+                  );
+                })}
               </select>
             </div>
           </div>
@@ -120,9 +155,15 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUse
                 value={serviceFilter}
                 onChange={(e) => setServiceFilter(e.target.value)}
               >
-                <option value="">All Service Types</option>
-                <option value={ServiceType.REGULAR}>{ServiceType.REGULAR}</option>
-                <option value={ServiceType.IRREGULAR}>{ServiceType.IRREGULAR}</option>
+                <option value="">All Service Types ({employees.length})</option>
+                {Object.values(ServiceType).map(type => {
+                  const count = serviceTypeCounts[type] || 0;
+                  return (
+                    <option key={type} value={type}>
+                      {type} ({count})
+                    </option>
+                  );
+                })}
               </select>
             </div>
           </div>
@@ -152,20 +193,20 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUse
           </thead>
           <tbody>
             {paginatedItems.map((emp) => {
-              const dept = data.departments.find(d => d.Department_ID === emp.Department_ID)?.Department_Name;
-              const office = data.offices.find(o => o.Office_ID === emp.Office_ID)?.Office_Name;
-              const post = data.posts.find(p => p.Post_ID === emp.Post_ID)?.Post_Name;
-              const payscale = data.payscales.find(p => p.Pay_ID === emp.Pay_ID)?.Pay_Name;
+              const dept = data.departments.find(d => Number(d.Department_ID) === Number(emp.Department_ID))?.Department_Name;
+              const office = data.offices.find(o => Number(o.Office_ID) === Number(emp.Office_ID))?.Office_Name;
+              const post = data.posts.find(p => Number(p.Post_ID) === Number(emp.Post_ID))?.Post_Name;
+              const payscale = data.payscales.find(p => Number(p.Pay_ID) === Number(emp.Pay_ID))?.Pay_Name;
               
               return (
                 <tr key={emp.Employee_ID}>
                   <td className="ps-4">
-                    <div className="fw-bold">{emp.Employee_Name} {emp.Employee_Surname}</div>
+                    <div className="fw-bold text-dark">{emp.Employee_Name} {emp.Employee_Surname}</div>
                     <div className="small text-muted">{emp.Gender} • <span className="text-primary fw-medium">{emp.Service_Type}</span></div>
                     {emp.PwD === 'Yes' && <span className="badge bg-warning-subtle text-warning small mt-1">PwD</span>}
                   </td>
                   <td>
-                    <div className="small fw-semibold">{office}</div>
+                    <div className="small fw-semibold text-secondary">{office}</div>
                     <div className="small text-muted">{dept}</div>
                   </td>
                   <td>
@@ -178,14 +219,14 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUse
                   </td>
                   <td>
                     <div className="small">{emp.Mobile}</div>
-                    <div className="small text-muted">EPIC: {emp.EPIC}</div>
+                    <div className="small text-muted" style={{fontSize: '0.75rem'}}>EPIC: {emp.EPIC}</div>
                   </td>
                   <td className="text-end pe-4">
                     <div className="btn-group">
-                      <button onClick={() => onEdit(emp)} className="btn btn-light btn-sm rounded-3 me-2 text-primary">
+                      <button onClick={() => onEdit(emp)} className="btn btn-light btn-sm rounded-3 me-2 text-primary shadow-sm border">
                         <Edit2 size={16} />
                       </button>
-                      <button onClick={() => onDelete(emp.Employee_ID)} className="btn btn-light btn-sm rounded-3 text-danger">
+                      <button onClick={() => onDelete(emp.Employee_ID)} className="btn btn-light btn-sm rounded-3 text-danger shadow-sm border">
                         <Trash2 size={16} />
                       </button>
                     </div>
@@ -197,7 +238,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUse
               <tr>
                 <td colSpan={5} className="text-center py-5 text-muted">
                   <div className="mb-2"><Search size={48} className="opacity-25" /></div>
-                  No employee records matched your criteria.
+                  No records found matching your current filter selection.
                 </td>
               </tr>
             )}
