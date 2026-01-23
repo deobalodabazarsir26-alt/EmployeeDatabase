@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Employee, AppData, ServiceType, User, UserType } from '../types';
-import { Search, Plus, Edit2, Trash2, Filter, ChevronLeft, ChevronRight, XCircle, Briefcase, Info } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, Filter, ChevronLeft, ChevronRight, XCircle, Briefcase, Info, AlertTriangle, CheckCircle2 } from 'lucide-react';
 
 interface EmployeeListProps {
   employees: Employee[];
@@ -18,6 +18,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUse
   const [searchTerm, setSearchTerm] = useState('');
   const [postFilter, setPostFilter] = useState<string>('');
   const [serviceFilter, setServiceFilter] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
 
   // Calculate counts for each service type based on total employees available to this user
@@ -49,14 +50,13 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUse
     if (currentUser.User_Type === UserType.ADMIN) return data.posts;
     
     // Normal users see ONLY the posts they have mapped in the "Manage My Posts" section
-    // We filter the global posts list by the IDs present in the user's selections
     return data.posts.filter(p => selections.includes(Number(p.Post_ID)));
   }, [data.posts, data.userPostSelections, currentUser]);
 
   // Reset to first page when filters change to avoid empty results on non-existent pages
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, postFilter, serviceFilter]);
+  }, [searchTerm, postFilter, serviceFilter, statusFilter]);
 
   const filtered = useMemo(() => {
     return employees.filter(emp => {
@@ -68,10 +68,11 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUse
       
       const matchesPost = postFilter === '' || Number(emp.Post_ID) === Number(postFilter);
       const matchesService = serviceFilter === '' || emp.Service_Type === serviceFilter;
+      const matchesStatus = statusFilter === '' || emp.Active === statusFilter;
 
-      return matchesSearch && matchesPost && matchesService;
+      return matchesSearch && matchesPost && matchesService && matchesStatus;
     });
-  }, [employees, searchTerm, postFilter, serviceFilter]);
+  }, [employees, searchTerm, postFilter, serviceFilter, statusFilter]);
 
   const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
   const paginatedItems = useMemo(() => {
@@ -83,6 +84,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUse
     setSearchTerm('');
     setPostFilter('');
     setServiceFilter('');
+    setStatusFilter('');
     setCurrentPage(1);
   };
 
@@ -103,7 +105,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUse
         </div>
 
         <div className="row g-3">
-          <div className="col-12 col-lg-4">
+          <div className="col-12 col-lg-3">
             <div className="input-group">
               <span className="input-group-text bg-light border-end-0 text-muted px-3">
                 <Search size={18} />
@@ -131,7 +133,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUse
                 <option value="">
                   {availablePosts.length === 0 
                     ? 'No Mapped Designations' 
-                    : `All Mapped Designations (${employees.length})`}
+                    : `All Designations (${employees.length})`}
                 </option>
                 {availablePosts.map(post => {
                   const count = postCounts[Number(post.Post_ID)] || 0;
@@ -145,34 +147,36 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUse
             </div>
           </div>
 
-          <div className="col-6 col-lg-3">
-            <div className="input-group">
-              <span className="input-group-text bg-light border-end-0 text-muted px-2">
-                <Info size={16} />
-              </span>
-              <select 
-                className="form-select bg-light border-start-0 ps-0"
-                value={serviceFilter}
-                onChange={(e) => setServiceFilter(e.target.value)}
-              >
-                <option value="">All Service Types ({employees.length})</option>
-                {Object.values(ServiceType).map(type => {
-                  const count = serviceTypeCounts[type] || 0;
-                  return (
-                    <option key={type} value={type}>
-                      {type} ({count})
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
+          <div className="col-6 col-lg-2">
+            <select 
+              className="form-select bg-light"
+              value={serviceFilter}
+              onChange={(e) => setServiceFilter(e.target.value)}
+            >
+              <option value="">All Services</option>
+              {Object.values(ServiceType).map(type => (
+                <option key={type} value={type}>{type}</option>
+              ))}
+            </select>
           </div>
 
-          <div className="col-12 col-lg-2">
+          <div className="col-6 col-lg-2">
+            <select 
+              className="form-select bg-light"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="">All Statuses</option>
+              <option value="Yes">Active Only</option>
+              <option value="No">Inactive Only</option>
+            </select>
+          </div>
+
+          <div className="col-6 col-lg-2">
             <button 
               onClick={clearFilters}
               className="btn btn-outline-secondary w-100 d-flex align-items-center justify-content-center gap-2"
-              disabled={!searchTerm && !postFilter && !serviceFilter}
+              disabled={!searchTerm && !postFilter && !serviceFilter && !statusFilter}
             >
               <XCircle size={18} /> Reset
             </button>
@@ -185,9 +189,9 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUse
           <thead>
             <tr>
               <th className="ps-4">Employee Details</th>
+              <th>Status</th>
               <th>Dept & Office</th>
               <th>Post & Payscale</th>
-              <th>Contact Info</th>
               <th className="text-end pe-4">Actions</th>
             </tr>
           </thead>
@@ -198,12 +202,28 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUse
               const post = data.posts.find(p => Number(p.Post_ID) === Number(emp.Post_ID))?.Post_Name;
               const payscale = data.payscales.find(p => Number(p.Pay_ID) === Number(emp.Pay_ID))?.Pay_Name;
               
+              const isActive = emp.Active !== 'No';
+
               return (
-                <tr key={emp.Employee_ID}>
+                <tr key={emp.Employee_ID} className={!isActive ? 'bg-light opacity-75' : ''}>
                   <td className="ps-4">
                     <div className="fw-bold text-dark">{emp.Employee_Name} {emp.Employee_Surname}</div>
                     <div className="small text-muted">{emp.Gender} • <span className="text-primary fw-medium">{emp.Service_Type}</span></div>
                     {emp.PwD === 'Yes' && <span className="badge bg-warning-subtle text-warning small mt-1">PwD</span>}
+                  </td>
+                  <td>
+                    {isActive ? (
+                      <span className="badge badge-soft-success rounded-pill d-inline-flex align-items-center gap-1">
+                        <CheckCircle2 size={12} /> Active
+                      </span>
+                    ) : (
+                      <div className="d-flex flex-column">
+                        <span className="badge bg-danger-subtle text-danger rounded-pill d-inline-flex align-items-center gap-1 mb-1">
+                          <AlertTriangle size={12} /> Inactive
+                        </span>
+                        {emp.DA_Reason && <span className="text-muted" style={{fontSize: '0.65rem'}}>{emp.DA_Reason}</span>}
+                      </div>
+                    )}
                   </td>
                   <td>
                     <div className="small fw-semibold text-secondary">{office}</div>
@@ -216,10 +236,6 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUse
                       </span>
                     </div>
                     <div className="small text-muted" style={{fontSize: '0.75rem'}}>{payscale}</div>
-                  </td>
-                  <td>
-                    <div className="small">{emp.Mobile}</div>
-                    <div className="small text-muted" style={{fontSize: '0.75rem'}}>EPIC: {emp.EPIC}</div>
                   </td>
                   <td className="text-end pe-4">
                     <div className="btn-group">

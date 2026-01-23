@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Employee, AppData, ServiceType, User, UserType } from '../types';
-import { Save, X, Info, User as UserIcon, Briefcase, Landmark, AlertCircle, Hash } from 'lucide-react';
+import { Save, X, Info, User as UserIcon, Briefcase, Landmark, AlertCircle, Hash, Activity } from 'lucide-react';
 
 interface EmployeeFormProps {
   employee: Employee | null;
@@ -11,11 +11,14 @@ interface EmployeeFormProps {
   onCancel: () => void;
 }
 
+const DEACTIVATION_REASONS = ['Transfer', 'Death', 'Resign', 'Debarred'];
+
 const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser, onSave, onCancel }) => {
   const [formData, setFormData] = useState<Partial<Employee>>(employee || {
     Gender: 'Male',
     PwD: 'No',
     Service_Type: ServiceType.REGULAR,
+    Active: 'Yes',
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -91,6 +94,11 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
     if (!formData.DOB) newErrors.DOB = "Date of birth is required";
     if (!formData.EPIC?.trim()) newErrors.EPIC = "EPIC number is required";
 
+    // Deactivation Reason Validation
+    if (formData.Active === 'No' && !formData.DA_Reason) {
+      newErrors.DA_Reason = "Please specify the deactivation reason";
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -98,7 +106,13 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (validate()) {
-      onSave(formData as Employee);
+      const now = new Date().toLocaleString();
+      const finalData = {
+        ...formData,
+        T_STMP_ADD: employee ? employee.T_STMP_ADD : now,
+        T_STMP_UPD: now,
+      } as Employee;
+      onSave(finalData);
     }
   };
 
@@ -107,7 +121,12 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
     let finalValue: any = value;
     if (name.includes('ID') || name === 'AC_No' || name === 'Employee_ID') finalValue = value === '' ? '' : Number(value);
     
-    setFormData(prev => ({ ...prev, [name]: finalValue }));
+    // Reset DA_Reason if status is back to Yes
+    if (name === 'Active' && value === 'Yes') {
+      setFormData(prev => ({ ...prev, [name]: finalValue, DA_Reason: '' }));
+    } else {
+      setFormData(prev => ({ ...prev, [name]: finalValue }));
+    }
 
     if (errors[name]) {
       setErrors(prev => {
@@ -130,9 +149,17 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
           <h2 className="fw-bold h4 mb-1">{employee ? 'Modify Record' : 'Employee Registration'}</h2>
           <p className="text-muted small mb-0">Complete all mandatory fields marked with asterisk (*)</p>
         </div>
-        <button onClick={onCancel} className="btn btn-outline-secondary btn-sm rounded-pill px-3">
-          <X size={16} /> Cancel
-        </button>
+        <div className="d-flex gap-2">
+          {employee && (
+            <div className="text-end me-3 d-none d-md-block">
+              <div className="text-muted" style={{fontSize: '0.65rem'}}>Created: {employee.T_STMP_ADD}</div>
+              <div className="text-muted" style={{fontSize: '0.65rem'}}>Last Updated: {employee.T_STMP_UPD}</div>
+            </div>
+          )}
+          <button onClick={onCancel} className="btn btn-outline-secondary btn-sm rounded-pill px-3">
+            <X size={16} /> Cancel
+          </button>
+        </div>
       </div>
 
       {Object.keys(errors).length > 0 && (
@@ -159,10 +186,12 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
               name="Employee_ID" 
               value={formData.Employee_ID ?? ''} 
               onChange={handleChange} 
-              className={`form-control bg-light border-start-0 ps-0 ${errors.Employee_ID ? 'is-invalid' : ''}`} 
+              readOnly={!!employee}
+              className={`form-control border-start-0 ps-0 ${employee ? 'bg-light text-muted fw-bold' : 'bg-light'} ${errors.Employee_ID ? 'is-invalid' : ''}`} 
               placeholder="e.g. 1001" 
             />
           </div>
+          {employee && <div className="text-muted mt-1" style={{fontSize: '0.65rem'}}>Registration ID cannot be modified</div>}
           <div className="text-danger small mt-1" style={{fontSize: '0.7rem'}}>{errors.Employee_ID}</div>
         </div>
 
@@ -310,6 +339,42 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
             ))}
           </select>
         </div>
+
+        <div className="col-12 mt-5">
+          <div className="d-flex align-items-center gap-2 mb-3 text-primary fw-bold border-start border-4 border-primary ps-3">
+            <Activity size={18} /> Record Status & Lifecycle
+          </div>
+        </div>
+
+        <div className="col-md-4">
+          <label className="form-label small fw-bold">Record Status *</label>
+          <select 
+            name="Active" 
+            value={formData.Active} 
+            onChange={handleChange} 
+            className="form-select"
+          >
+            <option value="Yes">Active (Enabled)</option>
+            <option value="No">Inactive (Disabled)</option>
+          </select>
+          <div className="form-text small">Mark "Inactive" to remove from active operations.</div>
+        </div>
+
+        {formData.Active === 'No' && (
+          <div className="col-md-8">
+            <label className="form-label small fw-bold">Reason for Deactivation *</label>
+            <select 
+              name="DA_Reason" 
+              value={formData.DA_Reason || ''} 
+              onChange={handleChange} 
+              className={`form-select ${errors.DA_Reason ? 'is-invalid' : ''}`}
+            >
+              <option value="">-- Select Reason --</option>
+              {DEACTIVATION_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+            <div className="invalid-feedback">{errors.DA_Reason}</div>
+          </div>
+        )}
 
         <div className="col-12 mt-5">
           <div className="d-flex align-items-center gap-2 mb-3 text-primary fw-bold border-start border-4 border-primary ps-3">

@@ -77,6 +77,11 @@ export interface Employee {
   Branch_ID: number;
   ACC_No: string;
   IFSC_Code: string;
+  // Lifecycle Management
+  Active: 'Yes' | 'No';
+  DA_Reason?: string;
+  T_STMP_ADD: string;
+  T_STMP_UPD: string;
 }
 
 export type AppData = {
