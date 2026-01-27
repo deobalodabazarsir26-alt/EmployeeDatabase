@@ -14,10 +14,21 @@ const DEPT_TYPES = ['State Govt', 'Central Govt', 'Autonomous', 'Local Body', 'S
 const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ data, onSaveDepartment, onDeleteDepartment }) => {
   const [editingDept, setEditingDept] = useState<Partial<Department> | null>(null);
 
+  // Helper to get department type regardless of GSheet header naming (Dept_Type vs Department_Type)
+  const getDeptType = (dept: any): string => {
+    if (!dept) return '';
+    return (dept.Department_Type || dept.Dept_Type || dept.department_type || '').trim();
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (editingDept?.Department_Name?.trim()) {
-      onSaveDepartment(editingDept as Department);
+      // Ensure we save using the standard key 'Department_Type' for the database
+      const finalDept = {
+        ...editingDept,
+        Department_Type: getDeptType(editingDept)
+      };
+      onSaveDepartment(finalDept as Department);
       setEditingDept(null);
     }
   };
@@ -71,7 +82,7 @@ const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ data, onSav
                   <span className="input-group-text bg-white"><Tag size={16} /></span>
                   <select 
                     className="form-select"
-                    value={editingDept.Department_Type || ''}
+                    value={getDeptType(editingDept)}
                     onChange={e => setEditingDept({...editingDept, Department_Type: e.target.value})}
                   >
                     <option value="">-- Choose Type --</option>
@@ -103,14 +114,16 @@ const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ data, onSav
               {data.departments.map(dept => {
                 const linkedOffices = data.offices.filter(o => Number(o.Department_ID) === Number(dept.Department_ID)).length;
                 const deletable = isDeletable(Number(dept.Department_ID));
+                const dType = getDeptType(dept);
+
                 return (
                   <tr key={dept.Department_ID}>
                     <td className="ps-4 fw-bold text-muted">#{dept.Department_ID}</td>
                     <td className="fw-semibold">{dept.Department_Name}</td>
                     <td>
-                      {dept.Department_Type ? (
+                      {dType ? (
                         <span className="badge bg-info-subtle text-info border border-info-subtle px-3 py-1">
-                          {dept.Department_Type}
+                          {dType}
                         </span>
                       ) : (
                         <span className="text-muted italic small">Uncategorized</span>

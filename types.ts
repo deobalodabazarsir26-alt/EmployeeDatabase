@@ -9,12 +9,16 @@ export interface User {
   User_Name: string;
   Password?: string;
   User_Type: UserType;
+  T_STMP_ADD?: string;
+  T_STMP_UPD?: string;
 }
 
 export interface Department {
   Department_ID: number;
   Department_Name: string;
   Department_Type?: string; // e.g. State, Central, Autonomous
+  T_STMP_ADD?: string;
+  T_STMP_UPD?: string;
 }
 
 export interface Office {
@@ -24,11 +28,15 @@ export interface Office {
   AC_No: number;
   Department_ID: number;
   User_ID: number;
+  T_STMP_ADD?: string;
+  T_STMP_UPD?: string;
 }
 
 export interface Bank {
   Bank_ID: number;
   Bank_Name: string;
+  T_STMP_ADD?: string;
+  T_STMP_UPD?: string;
 }
 
 export interface BankBranch {
@@ -36,6 +44,8 @@ export interface BankBranch {
   Branch_Name: string;
   IFSC_Code: string;
   Bank_ID: number;
+  T_STMP_ADD?: string;
+  T_STMP_UPD?: string;
 }
 
 export interface Post {
@@ -43,11 +53,15 @@ export interface Post {
   Post_Name: string;
   Category: string;
   Class: string;
+  T_STMP_ADD?: string;
+  T_STMP_UPD?: string;
 }
 
 export interface Payscale {
   Pay_ID: number;
   Pay_Name: string;
+  T_STMP_ADD?: string;
+  T_STMP_UPD?: string;
 }
 
 export enum ServiceType {

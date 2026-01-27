@@ -8,14 +8,14 @@ A high-performance, responsive web application built with React, Bootstrap 5, an
 To use your Google Sheet as a database, follow these steps exactly:
 
 ### 1. Prepare your Google Sheet
-Ensure your Google Sheet (ID: `1ESYHbrrjiTOFY49P9KXzOoGEJQPSGgWOE6JA-vNIFdU`) has the following tab names and headers:
-- `User`: (User_ID, User_Name, Password, User_Type)
-- `Department`: (Department_ID, Department_Name, **Department_Type**)
-- `Office`: (Office_ID, Office_Name, Block, AC_No, Department_ID, User_ID)
-- `Bank`: (Bank_ID, Bank_Name)
-- `Bank_Branch`: (Branch_ID, Branch_Name, IFSC_Code, Bank_ID)
-- `Post`: (Post_ID, Post_Name, Category, Class)
-- `Payscale`: (Pay_ID, Pay_Name)
+Ensure your Google Sheet has the following tab names and headers (case sensitive):
+- `User`: (User_ID, User_Name, Password, User_Type, **T_STMP_ADD**, **T_STMP_UPD**)
+- `Department`: (Department_ID, Department_Name, Department_Type, **T_STMP_ADD**, **T_STMP_UPD**)
+- `Office`: (Office_ID, Office_Name, Block, AC_No, Department_ID, User_ID, **T_STMP_ADD**, **T_STMP_UPD**)
+- `Bank`: (Bank_ID, Bank_Name, **T_STMP_ADD**, **T_STMP_UPD**)
+- `Bank_Branch`: (Branch_ID, Branch_Name, IFSC_Code, Bank_ID, **T_STMP_ADD**, **T_STMP_UPD**)
+- `Post`: (Post_ID, Post_Name, Category, Class, **T_STMP_ADD**, **T_STMP_UPD**)
+- `Payscale`: (Pay_ID, Pay_Name, **T_STMP_ADD**, **T_STMP_UPD**)
 - `Employee`: (Employee_ID, Employee_Name, Employee_Surname, Gender, DOB, PwD, Service_Type, Post_ID, Pay_ID, Department_ID, Office_ID, Mobile, EPIC, Bank_ID, Branch_ID, ACC_No, IFSC_Code, Active, DA_Reason, T_STMP_ADD, T_STMP_UPD)
 - `UserPostSelections`: (User_ID, Post_ID)
 
@@ -26,7 +26,8 @@ Ensure your Google Sheet (ID: `1ESYHbrrjiTOFY49P9KXzOoGEJQPSGgWOE6JA-vNIFdU`) ha
 
 ```javascript
 /**
- * GOOGLE APPS SCRIPT FOR EMS SYSTEM (V3 - Enhanced Relational Mapping)
+ * GOOGLE APPS SCRIPT FOR EMS SYSTEM (V4 - Concurrency Optimized)
+ * This script handles multi-user concurrent writes using LockService.
  */
 
 const SS = SpreadsheetApp.getActiveSpreadsheet();
@@ -71,32 +72,46 @@ function doGet() {
 }
 
 function doPost(e) {
-  const req = JSON.parse(e.postData.contents);
-  const action = req.action;
-  const payload = req.payload;
+  // Use ScriptLock to prevent concurrent write issues (multi-user robustness)
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(30000); // Wait up to 30 seconds for lock
+    
+    const req = JSON.parse(e.postData.contents);
+    const action = req.action;
+    const payload = req.payload;
+    let result = { status: 'success' };
 
-  switch(action) {
-    case 'upsertEmployee': upsertRow('Employee', 'Employee_ID', payload); break;
-    case 'deleteEmployee': deleteRow('Employee', 'Employee_ID', payload.Employee_ID); break;
-    case 'upsertOffice': upsertRow('Office', 'Office_ID', payload); break;
-    case 'deleteOffice': deleteRow('Office', 'Office_ID', payload.Office_ID); break;
-    case 'upsertDepartment': upsertRow('Department', 'Department_ID', payload); break;
-    case 'deleteDepartment': deleteRow('Department', 'Department_ID', payload.Department_ID); break;
-    case 'upsertBank': upsertRow('Bank', 'Bank_ID', payload); break;
-    case 'deleteBank': deleteRow('Bank', 'Bank_ID', payload.Bank_ID); break;
-    case 'upsertBranch': upsertRow('Bank_Branch', 'Branch_ID', payload); break;
-    case 'deleteBranch': deleteRow('Bank_Branch', 'Branch_ID', payload.Branch_ID); break;
-    case 'upsertPost': upsertRow('Post', 'Post_ID', payload); break;
-    case 'deletePost': deleteRow('Post', 'Post_ID', payload.Post_ID); break;
-    case 'upsertPayscale': upsertRow('Payscale', 'Pay_ID', payload); break;
-    case 'deletePayscale': deleteRow('Payscale', 'Pay_ID', payload.Pay_ID); break;
-    case 'upsertUser': upsertRow('User', 'User_ID', payload); break;
-    case 'deleteUser': deleteRow('User', 'User_ID', payload.User_ID); break;
-    case 'updatePostSelections': updatePostSelections(payload); break;
+    switch(action) {
+      case 'upsertEmployee': upsertRow('Employee', 'Employee_ID', payload); break;
+      case 'deleteEmployee': deleteRow('Employee', 'Employee_ID', payload.Employee_ID); break;
+      case 'upsertOffice': upsertRow('Office', 'Office_ID', payload); break;
+      case 'deleteOffice': deleteRow('Office', 'Office_ID', payload.Office_ID); break;
+      case 'upsertDepartment': upsertRow('Department', 'Department_ID', payload); break;
+      case 'deleteDepartment': deleteRow('Department', 'Department_ID', payload.Department_ID); break;
+      case 'upsertBank': upsertRow('Bank', 'Bank_ID', payload); break;
+      case 'deleteBank': deleteRow('Bank', 'Bank_ID', payload.Bank_ID); break;
+      case 'upsertBranch': upsertRow('Bank_Branch', 'Branch_ID', payload); break;
+      case 'deleteBranch': deleteRow('Bank_Branch', 'Branch_ID', payload.Branch_ID); break;
+      case 'upsertPost': upsertRow('Post', 'Post_ID', payload); break;
+      case 'deletePost': deleteRow('Post', 'Post_ID', payload.Post_ID); break;
+      case 'upsertPayscale': upsertRow('Payscale', 'Pay_ID', payload); break;
+      case 'deletePayscale': deleteRow('Payscale', 'Pay_ID', payload.Pay_ID); break;
+      case 'upsertUser': upsertRow('User', 'User_ID', payload); break;
+      case 'deleteUser': deleteRow('User', 'User_ID', payload.User_ID); break;
+      case 'updatePostSelections': updatePostSelections(payload); break;
+      default: result = { status: 'error', message: 'Invalid action' };
+    }
+
+    return ContentService.createTextOutput(JSON.stringify(result))
+      .setMimeType(ContentService.MimeType.JSON);
+
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } finally {
+    lock.releaseLock();
   }
-
-  return ContentService.createTextOutput(JSON.stringify({status: 'success'}))
-    .setMimeType(ContentService.MimeType.JSON);
 }
 
 function upsertRow(sheetName, idColumnName, data) {
@@ -159,5 +174,3 @@ function updatePostSelections(payload) {
 6. Set **Execute as:** Me.
 7. Set **Who has access:** Anyone.
 8. Copy the **Web App URL** and update your `constants.tsx`.
-
----

@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { User, UserType, AppData } from '../types';
-import { ShieldCheck, Plus, User as UserIcon, Lock, Save, Trash2, Edit2, X, AlertCircle } from 'lucide-react';
+import { ShieldCheck, Plus, User as UserIcon, Lock, Save, Trash2, Edit2, X, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface UserManagementProps {
   data: AppData;
@@ -12,6 +12,17 @@ interface UserManagementProps {
 const UserManagement: React.FC<UserManagementProps> = ({ data, onSaveUser, onDeleteUser }) => {
   const [editingUser, setEditingUser] = useState<Partial<User> | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [expandedUsers, setExpandedUsers] = useState<Set<number>>(new Set());
+
+  const toggleUserExpansion = (userId: number) => {
+    const newExpanded = new Set(expandedUsers);
+    if (newExpanded.has(userId)) {
+      newExpanded.delete(userId);
+    } else {
+      newExpanded.add(userId);
+    }
+    setExpandedUsers(newExpanded);
+  };
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -131,8 +142,15 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, onSaveUser, onDel
             </thead>
             <tbody>
               {data.users.map(user => {
-                const assignedOffices = data.offices.filter(o => Number(o.User_ID) === Number(user.User_ID));
-                const deletable = isDeletable(Number(user.User_ID));
+                const userId = Number(user.User_ID);
+                const assignedOffices = data.offices.filter(o => Number(o.User_ID) === userId);
+                const deletable = isDeletable(userId);
+                const isExpanded = expandedUsers.has(userId);
+                
+                const showAll = assignedOffices.length > 5;
+                const visibleOffices = isExpanded ? assignedOffices : assignedOffices.slice(0, 5);
+                const remainingCount = assignedOffices.length - 5;
+
                 return (
                   <tr key={user.User_ID}>
                     <td className="ps-4">
@@ -145,10 +163,36 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, onSaveUser, onDel
                       </span>
                     </td>
                     <td>
-                      <div className="d-flex flex-wrap gap-1">
-                        {assignedOffices.length > 0 ? assignedOffices.map(o => (
-                          <span key={o.Office_ID} className="badge bg-light text-dark border small fw-normal">{o.Office_Name}</span>
-                        )) : <span className="text-muted small italic">No assignments</span>}
+                      <div className="d-flex flex-wrap align-items-center gap-1" style={{ maxWidth: '400px' }}>
+                        {assignedOffices.length > 0 ? (
+                          <>
+                            {visibleOffices.map(o => (
+                              <span key={o.Office_ID} className="badge bg-light text-dark border small fw-normal">
+                                {o.Office_Name}
+                              </span>
+                            ))}
+                            {!isExpanded && showAll && (
+                              <span className="text-muted small fw-bold px-1">
+                                and {remainingCount} more
+                              </span>
+                            )}
+                            {showAll && (
+                              <button 
+                                onClick={() => toggleUserExpansion(userId)}
+                                className="btn btn-link btn-sm p-0 ms-1 text-primary text-decoration-none fw-bold d-flex align-items-center gap-1"
+                                style={{ fontSize: '0.7rem' }}
+                              >
+                                {isExpanded ? (
+                                  <>Show Less <ChevronUp size={12} /></>
+                                ) : (
+                                  <>Show All <ChevronDown size={12} /></>
+                                )}
+                              </button>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-muted small italic">No assignments</span>
+                        )}
                       </div>
                     </td>
                     <td className="text-end pe-4">

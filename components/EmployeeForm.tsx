@@ -114,13 +114,8 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (validate()) {
-      const now = new Date().toLocaleString();
-      const finalData = {
-        ...formData,
-        T_STMP_ADD: employee ? employee.T_STMP_ADD : now,
-        T_STMP_UPD: now,
-      } as Employee;
-      onSave(finalData);
+      // Timestamp logic moved to parent handler in App.tsx
+      onSave(formData as Employee);
     }
   };
 

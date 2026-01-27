@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Employee, AppData, ServiceType, User, UserType, Department } from '../types';
-import { Search, Plus, Edit2, Filter, ChevronLeft, ChevronRight, XCircle, Briefcase, AlertTriangle, CheckCircle2, Trash2, Layers, Building2, Tag, Activity } from 'lucide-react';
+import { Search, Plus, Edit2, Filter, ChevronLeft, ChevronRight, XCircle, Briefcase, AlertTriangle, CheckCircle2, Trash2, Layers, Building2, Tag, Activity, ListOrdered } from 'lucide-react';
 
 interface EmployeeListProps {
   employees: Employee[];
@@ -12,8 +12,6 @@ interface EmployeeListProps {
   onDelete: (empId: number) => void;
 }
 
-const ITEMS_PER_PAGE = 10;
-
 const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUser, onEdit, onAddNew, onDelete }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [deptTypeFilter, setDeptTypeFilter] = useState<string>(''); 
@@ -23,13 +21,14 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUse
   const [serviceFilter, setServiceFilter] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25); // Default increased to 25
 
   const isAdmin = currentUser.User_Type === UserType.ADMIN;
 
-  // Helper to extract department type reliably across potential case variations from GSheets
+  // Helper to extract department type reliably across potential case/name variations from GSheets
   const getDeptType = (dept?: Department): string => {
     if (!dept) return '';
-    return (dept.Department_Type || (dept as any).department_type || '').trim();
+    return (dept.Department_Type || (dept as any).Dept_Type || (dept as any).department_type || '').trim();
   };
 
   // --- 1. BASE DATA SCOPING ---
@@ -194,31 +193,36 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUse
     });
   }, [filteredByOffice, postFilter, serviceFilter, statusFilter]);
 
-  const totalPages = Math.ceil(filteredResults.length / ITEMS_PER_PAGE);
+  const totalPages = Math.ceil(filteredResults.length / itemsPerPage);
   const paginatedItems = useMemo(() => {
-    const start = (currentPage - 1) * ITEMS_PER_PAGE;
-    return filteredResults.slice(start, start + ITEMS_PER_PAGE);
-  }, [filteredResults, currentPage]);
+    const start = (currentPage - 1) * itemsPerPage;
+    return filteredResults.slice(start, start + itemsPerPage);
+  }, [filteredResults, currentPage, itemsPerPage]);
 
-  useEffect(() => setCurrentPage(1), [searchTerm, deptTypeFilter, deptFilter, officeFilter, postFilter, serviceFilter, statusFilter]);
+  useEffect(() => setCurrentPage(1), [searchTerm, deptTypeFilter, deptFilter, officeFilter, postFilter, serviceFilter, statusFilter, itemsPerPage]);
 
   const clearFilters = () => {
     setSearchTerm(''); setDeptTypeFilter(''); setDeptFilter(''); setOfficeFilter('');
     setPostFilter(''); setServiceFilter(''); setStatusFilter('');
   };
 
-  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE + 1;
-  const endIndex = Math.min(currentPage * ITEMS_PER_PAGE, filteredResults.length);
+  const startIndex = filteredResults.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0;
+  const endIndex = Math.min(currentPage * itemsPerPage, filteredResults.length);
 
   return (
     <div className="card shadow-sm border-0 rounded-4">
       <div className="card-header bg-white py-4 border-bottom px-4">
         <div className="d-flex justify-content-between align-items-center mb-4">
-          <h5 className="fw-bold mb-0 d-flex align-items-center gap-2">
-            <Filter size={20} className="text-primary" />
-            Employee Directory
-          </h5>
-          <button onClick={onAddNew} className="btn btn-primary d-inline-flex align-items-center gap-2 shadow-sm">
+          <div>
+            <h5 className="fw-bold mb-0 d-flex align-items-center gap-2">
+              <Filter size={20} className="text-primary" />
+              Employee Directory
+            </h5>
+            <p className="text-muted small mb-0 mt-1">
+              Showing <span className="fw-bold text-dark">{filteredResults.length}</span> matching records from total <span className="fw-bold text-primary">{employees.length}</span>
+            </p>
+          </div>
+          <button onClick={onAddNew} className="btn btn-primary d-inline-flex align-items-center gap-2 shadow-sm px-4">
             <Plus size={18} /> Add New Record
           </button>
         </div>
@@ -227,7 +231,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUse
           <div className="col">
             <div className="input-group shadow-sm h-100 overflow-hidden">
               <span className="input-group-text bg-white border-end-0 text-muted px-2"><Search size={16} /></span>
-              <input type="text" className="form-control border-start-0 ps-1" placeholder="Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+              <input type="text" className="form-control border-start-0 ps-1" placeholder="Search by name, EPIC or Mobile..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
             </div>
           </div>
           
@@ -310,7 +314,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUse
           </div>
 
           <div className="col">
-            <button onClick={clearFilters} className="btn btn-outline-secondary w-100 h-100 d-flex align-items-center justify-content-center gap-2 shadow-sm py-2" disabled={!searchTerm && !deptTypeFilter && !deptFilter && !officeFilter && !postFilter && !serviceFilter && !statusFilter}>
+            <button onClick={clearFilters} className="btn btn-outline-secondary w-100 h-100 d-flex align-items-center justify-content-center gap-2 shadow-sm py-2 border-2 fw-semibold" disabled={!searchTerm && !deptTypeFilter && !deptFilter && !officeFilter && !postFilter && !serviceFilter && !statusFilter}>
               <XCircle size={18} /> Reset All
             </button>
           </div>
@@ -348,7 +352,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUse
                   </td>
                   <td>
                     {isActive ? (
-                      <span className="badge badge-soft-success rounded-pill d-inline-flex align-items-center gap-1"><CheckCircle2 size={12} /> Active</span>
+                      <span className="badge badge-soft-success rounded-pill d-inline-flex align-items-center gap-1 shadow-none"><CheckCircle2 size={12} /> Active</span>
                     ) : (
                       <div className="d-flex flex-column">
                         <span className="badge bg-danger-subtle text-danger rounded-pill d-inline-flex align-items-center gap-1 mb-1"><AlertTriangle size={12} /> Inactive</span>
@@ -370,34 +374,96 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUse
                   </td>
                   <td className="text-end pe-4">
                     <div className="d-flex gap-2 justify-content-end">
-                      <button onClick={() => onEdit(emp)} className="btn btn-light btn-sm rounded-3 text-primary shadow-sm border px-3"><Edit2 size={16} /></button>
-                      {isAdmin && <button onClick={() => { if(window.confirm(`Delete ${emp.Employee_Name}?`)) onDelete(emp.Employee_ID); }} className="btn btn-outline-danger btn-sm rounded-3 shadow-sm px-3"><Trash2 size={16} /></button>}
+                      <button onClick={() => onEdit(emp)} className="btn btn-light btn-sm rounded-3 text-primary shadow-sm border px-3" title="Edit Record"><Edit2 size={16} /></button>
+                      {isAdmin && <button onClick={() => { if(window.confirm(`Delete ${emp.Employee_Name}?`)) onDelete(emp.Employee_ID); }} className="btn btn-outline-danger btn-sm rounded-3 shadow-sm px-3" title="Delete Record"><Trash2 size={16} /></button>}
                     </div>
                   </td>
                 </tr>
               );
             })}
             {filteredResults.length === 0 && (
-              <tr><td colSpan={5} className="text-center py-5 text-muted">No records found matching your filters.</td></tr>
+              <tr><td colSpan={5} className="text-center py-5 text-muted">No records found matching your current filters.</td></tr>
             )}
           </tbody>
         </table>
       </div>
 
-      {filteredResults.length > 0 && (
-        <div className="card-footer bg-white py-3 border-top-0 d-flex flex-column flex-md-row justify-content-between align-items-center gap-3 px-4">
-          <div className="text-muted small">Showing <span className="fw-bold text-dark">{startIndex}</span>- <span className="fw-bold text-dark">{endIndex}</span> of <span className="fw-bold text-dark">{filteredResults.length}</span> records</div>
-          {totalPages > 1 && (
-            <nav aria-label="Page navigation">
-              <ul className="pagination mb-0">
-                <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}><button className="page-link d-flex align-items-center gap-1 border-0 rounded-3 shadow-sm mx-1" onClick={() => setCurrentPage(p => Math.max(1, p - 1))}><ChevronLeft size={16} /></button></li>
-                <li className="page-item disabled"><span className="page-link bg-transparent border-0 text-dark fw-bold px-3">{currentPage} / {totalPages}</span></li>
-                <li className={`page-item ${currentPage === totalPages ? 'disabled' : ''}`}><button className="page-link d-flex align-items-center gap-1 border-0 rounded-3 shadow-sm mx-1" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}><ChevronRight size={16} /></button></li>
-              </ul>
-            </nav>
-          )}
+      <div className="card-footer bg-white py-4 border-top d-flex flex-column flex-lg-row justify-content-between align-items-center gap-4 px-4">
+        <div className="d-flex align-items-center gap-4">
+          <div className="text-muted small">
+            Showing <span className="fw-bold text-dark">{startIndex}</span> to <span className="fw-bold text-dark">{endIndex}</span> of <span className="fw-bold text-primary">{filteredResults.length}</span> records
+          </div>
+          
+          <div className="d-flex align-items-center gap-2">
+            <span className="small text-muted fw-medium d-none d-sm-inline">Rows per page:</span>
+            <select 
+              className="form-select form-select-sm shadow-sm border-2" 
+              style={{width: 'auto', minWidth: '80px'}} 
+              value={itemsPerPage} 
+              onChange={(e) => {
+                const val = e.target.value;
+                setItemsPerPage(val === 'all' ? filteredResults.length : Number(val));
+                setCurrentPage(1);
+              }}
+            >
+              <option value={10}>10</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+              <option value="all">All</option>
+            </select>
+          </div>
         </div>
-      )}
+
+        {totalPages > 1 && (
+          <nav aria-label="Page navigation" className="shadow-sm rounded-3 overflow-hidden">
+            <ul className="pagination mb-0">
+              <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
+                <button 
+                  className="page-link border-0 py-2 px-3 d-flex align-items-center gap-1 fw-semibold" 
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                >
+                  <ChevronLeft size={18} /> Prev
+                </button>
+              </li>
+              
+              <li className="page-item active shadow-none">
+                <span className="page-link bg-primary border-0 py-2 px-4 fw-bold">
+                  {currentPage} / {totalPages}
+                </span>
+              </li>
+              
+              <li className={`page-item ${currentPage === totalPages ? 'disabled' : ''}`}>
+                <button 
+                  className="page-link border-0 py-2 px-3 d-flex align-items-center gap-1 fw-semibold" 
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                >
+                  Next <ChevronRight size={18} />
+                </button>
+              </li>
+            </ul>
+          </nav>
+        )}
+      </div>
+      
+      <style>{`
+        .pagination .page-link {
+          color: var(--bs-primary);
+          transition: all 0.2s;
+        }
+        .pagination .page-link:hover {
+          background-color: #f1f5f9;
+        }
+        .pagination .page-item.disabled .page-link {
+          color: #94a3b8;
+          background-color: #f8fafc;
+        }
+        .pagination .page-item.active .page-link {
+          background-color: var(--bs-primary);
+          color: white;
+          z-index: 1;
+        }
+      `}</style>
     </div>
   );
 };
