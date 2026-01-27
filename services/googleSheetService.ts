@@ -42,21 +42,24 @@ export const syncService = {
       clearTimeout(timeoutId);
       
       const responseText = await response.text();
+      console.log(`Raw Server Response [${action}]:`, responseText);
+
       let result;
       try {
         result = JSON.parse(responseText);
       } catch (e) {
-        throw new Error(`Invalid response from server: ${responseText.substring(0, 100)}`);
+        throw new Error(`Server returned non-JSON: ${responseText.substring(0, 50)}...`);
       }
 
       if (result.status === 'error') {
+        console.error(`Apps Script Logic Error [${action}]:`, result.message);
         return { success: false, error: result.message };
       }
       
       console.log(`Cloud Sync Success: [${action}]`);
       return { success: true };
     } catch (error: any) {
-      const message = error.name === 'AbortError' ? 'Request timed out (60s)' : (error instanceof Error ? error.message : 'Network error');
+      const message = error.name === 'AbortError' ? 'Request timed out' : (error instanceof Error ? error.message : 'Network error');
       console.error(`Cloud Sync Failed: [${action}]`, message);
       return { success: false, error: message };
     }

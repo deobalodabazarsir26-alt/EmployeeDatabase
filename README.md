@@ -1,11 +1,14 @@
 
 # Employee Management System (EMS)
 
-## 🛠️ Google Apps Script (Backend)
-Copy and paste this code into your **Google Apps Script** editor (**Extensions > Apps Script**) and deploy it as a **Web App** (Set access to "Anyone").
+## 🛠️ Master Google Apps Script
+Copy this entire block into your **Google Apps Script** editor (**Extensions > Apps Script**). After pasting, click **Deploy > New Deployment**, choose **Web App**, set access to **"Anyone"**, and use the provided URL in your `constants.tsx`.
 
 ```javascript
-// MASTER CRUD SCRIPT FOR EMS
+/**
+ * MASTER CRUD SCRIPT FOR EMS PRO
+ */
+
 function doGet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const data = {
@@ -19,7 +22,8 @@ function doGet() {
     employees: getSheetData(ss, 'Employee'),
     userPostSelections: getSelectionData(ss)
   };
-  return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
+  return ContentService.createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 function doPost(e) {
@@ -31,16 +35,21 @@ function doPost(e) {
     
     let result = { status: 'success' };
 
+    // Handle Upserts (Add/Update)
     if (action.startsWith('upsert')) {
-      const sheetName = action.replace('upsert', '');
-      upsertRow(ss, sheetName === 'Branch' ? 'Bank_Branch' : sheetName, payload);
+      const entity = action.replace('upsert', '');
+      const sheetName = entity === 'Branch' ? 'Bank_Branch' : entity;
+      upsertRow(ss, sheetName, payload);
     } 
+    // Handle Deletions
     else if (action.startsWith('delete')) {
-      const sheetName = action.replace('delete', '');
-      const actualSheetName = sheetName === 'Branch' ? 'Bank_Branch' : sheetName;
+      const entity = action.replace('delete', '');
+      const sheetName = entity === 'Branch' ? 'Bank_Branch' : entity;
       const idKey = Object.keys(payload)[0];
-      deleteRow(ss, actualSheetName, idKey, payload[idKey]);
+      const idValue = payload[idKey];
+      deleteRow(ss, sheetName, idKey, idValue);
     }
+    // Special Handlers
     else if (action === 'updateUserPostSelections') {
       updateSelections(ss, payload);
     }
@@ -48,18 +57,23 @@ function doPost(e) {
       payload.forEach(item => upsertRow(ss, 'Bank_Branch', item));
     }
 
-    return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
+    return ContentService.createTextOutput(JSON.stringify(result))
+      .setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: err.toString() })).setMimeType(ContentService.MimeType.JSON);
+    return ContentService.createTextOutput(JSON.stringify({ 
+      status: 'error', 
+      message: err.toString() 
+    })).setMimeType(ContentService.MimeType.JSON);
   }
 }
 
-// --- HELPER FUNCTIONS ---
+// --- CORE UTILITIES ---
 
 function getSheetData(ss, name) {
   const sheet = ss.getSheetByName(name);
   if (!sheet) return [];
   const vals = sheet.getDataRange().getValues();
+  if (vals.length < 2) return [];
   const headers = vals.shift();
   return vals.map(row => {
     let obj = {};
@@ -70,14 +84,19 @@ function getSheetData(ss, name) {
 
 function upsertRow(ss, sheetName, data) {
   const sheet = ss.getSheetByName(sheetName);
+  if (!sheet) throw new Error("Sheet '" + sheetName + "' not found");
+  
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-  const idKey = headers[0];
+  const idKey = headers[0]; // Assuming first column is always ID
   const idValue = data[idKey];
   
   const vals = sheet.getDataRange().getValues();
   let rowIndex = -1;
   for (let i = 1; i < vals.length; i++) {
-    if (vals[i][0] == idValue) { rowIndex = i + 1; break; }
+    if (vals[i][0].toString().trim() == idValue.toString().trim()) { 
+      rowIndex = i + 1; 
+      break; 
+    }
   }
 
   const rowData = headers.map(h => data[h] === undefined ? "" : data[h]);
@@ -88,24 +107,44 @@ function upsertRow(ss, sheetName, data) {
   }
 }
 
+/**
+ * Robust delete function that finds the ID column by key
+ */
 function deleteRow(ss, sheetName, idKey, idValue) {
   const sheet = ss.getSheetByName(sheetName);
-  if (!sheet) throw new Error("Sheet " + sheetName + " not found");
-  const vals = sheet.getDataRange().getValues();
-  for (let i = 1; i < vals.length; i++) {
-    // Loose equality check to handle string/number comparison
-    if (vals[i][0] == idValue) {
+  if (!sheet) throw new Error("Sheet '" + sheetName + "' not found");
+  
+  const data = sheet.getDataRange().getValues();
+  if (data.length < 2) throw new Error("Sheet is empty");
+  
+  const headers = data[0];
+  // Find column index (case-insensitive search)
+  const colIndex = headers.findIndex(h => h.toString().toLowerCase() === idKey.toLowerCase());
+  const searchCol = colIndex >= 0 ? colIndex : 0; // Fallback to first column
+  
+  const targetId = idValue.toString().trim();
+  let deleted = false;
+
+  // Search from bottom up to avoid index shifts during deletion
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (data[i][searchCol].toString().trim() == targetId) {
       sheet.deleteRow(i + 1);
-      return;
+      deleted = true;
+      // Continue searching if there might be duplicates, or return if IDs are unique
+      return; 
     }
   }
-  throw new Error("Record with ID " + idValue + " not found in " + sheetName);
+  
+  if (!deleted) {
+    throw new Error("Record with " + idKey + " [" + idValue + "] not found in " + sheetName);
+  }
 }
 
 function getSelectionData(ss) {
   const sheet = ss.getSheetByName('UserPostSelections');
   if (!sheet) return {};
   const vals = sheet.getDataRange().getValues();
+  if (vals.length < 2) return {};
   vals.shift();
   const map = {};
   vals.forEach(r => {
@@ -118,17 +157,24 @@ function getSelectionData(ss) {
 }
 
 function updateSelections(ss, payload) {
-  const sheet = ss.getSheetByName('UserPostSelections');
-  const userId = payload.User_ID;
+  let sheet = ss.getSheetByName('UserPostSelections');
+  if (!sheet) {
+    sheet = ss.insertSheet('UserPostSelections');
+    sheet.appendRow(['User_ID', 'Post_ID']);
+  }
+  
+  const userId = payload.User_ID.toString().trim();
   const postIds = payload.Post_IDs;
   
   const vals = sheet.getDataRange().getValues();
   for (let i = vals.length - 1; i >= 1; i--) {
-    if (vals[i][0] == userId) sheet.deleteRow(i + 1);
+    if (vals[i][0].toString().trim() == userId) {
+      sheet.deleteRow(i + 1);
+    }
   }
-  postIds.forEach(pId => sheet.appendRow([userId, pId]));
+  
+  postIds.forEach(pId => {
+    sheet.appendRow([payload.User_ID, pId]);
+  });
 }
 ```
-
-### Automatic IFSC Lookup Functions
-(Include the `FETCH_IFSC_BRANCH` and `FETCH_IFSC_BANK` code here as previously provided...)
