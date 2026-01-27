@@ -146,6 +146,7 @@ export default function App() {
     const result = await syncService.saveData(action, payload);
     if (!result.success) {
       setSyncError(`Update failed: ${result.error || 'Connection error'}`);
+      // Rollback to previous known good state from server
       await loadData(false);
     } else {
       setLastSynced(new Date());
@@ -169,10 +170,11 @@ export default function App() {
   };
 
   const deleteUser = (userId: number) => {
-    const hasOffices = data.offices.some(o => Number(o.User_ID) === userId);
+    const id = Number(userId);
+    const hasOffices = data.offices.some(o => Number(o.User_ID) === id);
     if (hasOffices) return alert("User is active custodian for offices.");
-    const newUsers = data.users.filter(u => Number(u.User_ID) !== userId);
-    performSync('deleteUser', { User_ID: userId }, { ...data, users: newUsers });
+    const newUsers = data.users.filter(u => Number(u.User_ID) !== id);
+    performSync('deleteUser', { User_ID: id }, { ...data, users: newUsers });
   };
 
   const upsertDepartment = (dept: Department) => {
@@ -188,8 +190,9 @@ export default function App() {
   };
 
   const deleteDepartment = (deptId: number) => {
-    const newDepts = data.departments.filter(d => Number(d.Department_ID) !== deptId);
-    performSync('deleteDepartment', { Department_ID: deptId }, { ...data, departments: newDepts });
+    const id = Number(deptId);
+    const newDepts = data.departments.filter(d => Number(d.Department_ID) !== id);
+    performSync('deleteDepartment', { Department_ID: id }, { ...data, departments: newDepts });
   };
 
   const upsertOffice = (office: Office) => {
@@ -205,8 +208,9 @@ export default function App() {
   };
 
   const deleteOffice = (officeId: number) => {
-    const newOffices = data.offices.filter(o => Number(o.Office_ID) !== officeId);
-    performSync('deleteOffice', { Office_ID: officeId }, { ...data, offices: newOffices });
+    const id = Number(officeId);
+    const newOffices = data.offices.filter(o => Number(o.Office_ID) !== id);
+    performSync('deleteOffice', { Office_ID: id }, { ...data, offices: newOffices });
   };
 
   const upsertBank = (bank: Bank) => {
@@ -222,13 +226,14 @@ export default function App() {
   };
 
   const deleteBank = (bankId: number) => {
-    const hasBranches = (data.branches || []).some(b => Number(b.Bank_ID) === bankId);
-    const hasEmployees = (data.employees || []).some(e => Number(e.Bank_ID) === bankId);
+    const id = Number(bankId);
+    const hasBranches = (data.branches || []).some(b => Number(b.Bank_ID) === id);
+    const hasEmployees = (data.employees || []).some(e => Number(e.Bank_ID) === id);
     if (hasBranches || hasEmployees) {
       return alert("Cannot delete bank: It has registered branches or assigned employees.");
     }
-    const newBanks = data.banks.filter(b => Number(b.Bank_ID) !== bankId);
-    performSync('deleteBank', { Bank_ID: bankId }, { ...data, banks: newBanks });
+    const newBanks = data.banks.filter(b => Number(b.Bank_ID) !== id);
+    performSync('deleteBank', { Bank_ID: id }, { ...data, banks: newBanks });
   };
 
   const upsertBranch = (branch: BankBranch) => {
@@ -258,12 +263,13 @@ export default function App() {
   };
 
   const deleteBranch = (branchId: number) => {
-    const hasEmployees = (data.employees || []).some(e => Number(e.Branch_ID) === branchId);
+    const id = Number(branchId);
+    const hasEmployees = (data.employees || []).some(e => Number(e.Branch_ID) === id);
     if (hasEmployees) {
       return alert("Cannot delete branch: It is currently assigned to one or more employees.");
     }
-    const newBranches = data.branches.filter(b => Number(b.Branch_ID) !== branchId);
-    performSync('deleteBranch', { Branch_ID: branchId }, { ...data, branches: newBranches });
+    const newBranches = data.branches.filter(b => Number(b.Branch_ID) !== id);
+    performSync('deleteBranch', { Branch_ID: id }, { ...data, branches: newBranches });
   };
 
   const upsertPost = (post: Post) => {
@@ -279,8 +285,9 @@ export default function App() {
   };
 
   const deletePost = (postId: number) => {
-    const newPosts = data.posts.filter(p => Number(p.Post_ID) !== postId);
-    performSync('deletePost', { Post_ID: postId }, { ...data, posts: newPosts });
+    const id = Number(postId);
+    const newPosts = data.posts.filter(p => Number(p.Post_ID) !== id);
+    performSync('deletePost', { Post_ID: id }, { ...data, posts: newPosts });
   };
 
   const upsertPayscale = (pay: Payscale) => {
@@ -296,8 +303,9 @@ export default function App() {
   };
 
   const deletePayscale = (payId: number) => {
-    const newPays = data.payscales.filter(p => Number(p.Pay_ID) !== payId);
-    performSync('deletePayscale', { Pay_ID: payId }, { ...data, payscales: newPays });
+    const id = Number(payId);
+    const newPays = data.payscales.filter(p => Number(p.Pay_ID) !== id);
+    performSync('deletePayscale', { Pay_ID: id }, { ...data, payscales: newPays });
   };
 
   const upsertEmployee = (employee: Employee) => {
@@ -318,8 +326,9 @@ export default function App() {
   };
 
   const deleteEmployee = (empId: number) => {
-    const newEmployees = data.employees.filter(e => Number(e.Employee_ID) !== empId);
-    performSync('deleteEmployee', { Employee_ID: empId }, { ...data, employees: newEmployees });
+    const id = Number(empId);
+    const newEmployees = data.employees.filter(e => Number(e.Employee_ID) !== id);
+    performSync('deleteEmployee', { Employee_ID: id }, { ...data, employees: newEmployees });
   };
 
   const togglePostSelection = (postId: number) => {
