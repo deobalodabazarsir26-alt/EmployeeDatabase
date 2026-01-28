@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Employee, AppData, ServiceType, User, UserType } from '../types';
-import { Save, X, Info, User as UserIcon, Briefcase, Landmark, AlertCircle, Hash, Activity, Search, Loader2, Power, FileText, Upload, ExternalLink, Camera, Scissors, Smartphone, CreditCard } from 'lucide-react';
+import { Save, X, Info, User as UserIcon, Briefcase, Landmark, AlertCircle, Hash, Activity, Search, Loader2, Power, FileText, Upload, ExternalLink, Camera, Scissors, Smartphone, CreditCard, Crop, Check } from 'lucide-react';
 import { ifscService } from '../services/ifscService';
 
 interface EmployeeFormProps {
@@ -29,8 +29,9 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
   
   // File states
   const [selectedDoc, setSelectedDoc] = useState<File | null>(null);
-  const [selectedPhoto, setSelectedPhoto] = useState<File | null>(null);
+  const [rawPhoto, setRawPhoto] = useState<string | null>(null);
   const [croppedPhotoBase64, setCroppedPhotoBase64] = useState<string | null>(null);
+  const [showCropper, setShowCropper] = useState(false);
   
   const docInputRef = useRef<HTMLInputElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -66,39 +67,43 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
     }
   }, [formData.Bank_ID, data.branches]);
 
-  const autoCropImage = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
+  const processAndCrop = (imageSrc: string) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
 
-        const targetWidth = 300;
-        const targetHeight = 400;
-        canvas.width = targetWidth;
-        canvas.height = targetHeight;
+      // ID Card Standard Aspect Ratio (3:4)
+      const targetWidth = 450;
+      const targetHeight = 600;
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
 
-        const imgAspect = img.width / img.height;
-        const targetAspect = targetWidth / targetHeight;
+      const imgAspect = img.width / img.height;
+      const targetAspect = targetWidth / targetHeight;
 
-        let sourceX = 0, sourceY = 0, sourceWidth = img.width, sourceHeight = img.height;
-        if (imgAspect > targetAspect) {
-          sourceWidth = img.height * targetAspect;
-          sourceX = (img.width - sourceWidth) / 2;
-        } else {
-          sourceHeight = img.width / targetAspect;
-          sourceY = (img.height - sourceHeight) / 2;
-        }
+      let sx = 0, sy = 0, sWidth = img.width, sHeight = img.height;
 
-        ctx.drawImage(img, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, targetWidth, targetHeight);
-        setCroppedPhotoBase64(canvas.toDataURL('image/jpeg', 0.85).split(',')[1]);
-      };
-      img.src = e.target?.result as string;
+      if (imgAspect > targetAspect) {
+        // Source is wider, crop sides
+        sWidth = img.height * targetAspect;
+        sx = (img.width - sWidth) / 2;
+      } else {
+        // Source is taller, crop top/bottom
+        sHeight = img.width / targetAspect;
+        sy = (img.height - sHeight) / 2;
+      }
+
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, targetWidth, targetHeight);
+      ctx.drawImage(img, sx, sy, sWidth, sHeight, 0, 0, targetWidth, targetHeight);
+      
+      setCroppedPhotoBase64(canvas.toDataURL('image/jpeg', 0.9).split(',')[1]);
+      setShowCropper(true);
     };
-    reader.readAsDataURL(file);
+    img.src = imageSrc;
   };
 
   const validate = (): boolean => {
@@ -110,12 +115,10 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
     if (!formData.Gender) newErrors.Gender = "Required";
     if (!formData.Mobile || !/^[0-9]{10}$/.test(formData.Mobile)) newErrors.Mobile = "10 digit mobile required";
     if (!formData.EPIC?.trim()) newErrors.EPIC = "Required";
-    
     if (!formData.Department_ID) newErrors.Department_ID = "Required";
     if (!formData.Office_ID) newErrors.Office_ID = "Required";
     if (!formData.Post_ID) newErrors.Post_ID = "Required";
     if (!formData.Pay_ID) newErrors.Pay_ID = "Required";
-
     if (!formData.ACC_No) newErrors.ACC_No = "Required";
     if (!formData.Bank_ID) newErrors.Bank_ID = "Required";
     if (!formData.Branch_ID) newErrors.Branch_ID = "Required";
@@ -136,9 +139,9 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
     const details = await ifscService.fetchDetails(ifsc);
     setIsVerifyingIfsc(false);
     if (details) {
-      alert(`Bank: ${details.BANK}\nBranch: ${details.BRANCH}\n\nMatching records found.`);
+      alert(`Verified on Web:\nBank: ${details.BANK}\nBranch: ${details.BRANCH}\n\nData is valid.`);
     } else {
-      alert('IFSC not found on web.');
+      alert('IFSC not found on official database.');
     }
   };
 
@@ -155,10 +158,10 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
       setIsUploading(true);
       let payload = { ...formData };
       try {
-        if (selectedPhoto && croppedPhotoBase64) {
+        if (croppedPhotoBase64) {
           (payload as any).photoData = {
             base64: croppedPhotoBase64,
-            name: `photo_${formData.Employee_ID}.jpg`,
+            name: `emp_photo_${formData.Employee_ID}.jpg`,
             mimeType: 'image/jpeg'
           };
         }
@@ -172,7 +175,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
         }
         onSave(payload as Employee);
       } catch (err) {
-        alert('Upload Error');
+        alert('Transmission error. Please try again.');
         setIsUploading(false);
       }
     }
@@ -182,13 +185,17 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       if (file.size > MAX_FILE_SIZE_BYTES) {
-        alert("Size limit 2MB exceeded.");
+        alert("Security Alert: File size exceeds the 2MB corporate limit.");
         e.target.value = '';
         return;
       }
       if (type === 'photo') {
-        setSelectedPhoto(file);
-        autoCropImage(file);
+        const reader = new FileReader();
+        reader.onload = (re) => {
+          setRawPhoto(re.target?.result as string);
+          processAndCrop(re.target?.result as string);
+        };
+        reader.readAsDataURL(file);
       } else {
         setSelectedDoc(file);
       }
@@ -196,21 +203,40 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
   };
 
   return (
-    <div className="card shadow border-0 p-4 p-md-5">
+    <div className="card shadow-lg border-0 p-4 p-md-5 animate-in">
+      {/* CROPPER OVERLAY */}
+      {showCropper && (
+        <div className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style={{ zIndex: 1100, backgroundColor: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(5px)' }}>
+          <div className="bg-white p-4 rounded-4 shadow-lg text-center" style={{ maxWidth: '400px' }}>
+            <h5 className="fw-bold mb-3 d-flex align-items-center justify-content-center gap-2">
+              <Crop className="text-primary" /> Cropping Facility
+            </h5>
+            <p className="small text-muted mb-4">The system has automatically detected the best 3:4 portrait crop for this employee photo.</p>
+            <div className="mb-4 border rounded-3 overflow-hidden shadow-sm mx-auto" style={{ width: '225px', height: '300px' }}>
+              <img src={`data:image/jpeg;base64,${croppedPhotoBase64}`} className="w-100 h-100 object-fit-cover" alt="Cropped Preview" />
+            </div>
+            <div className="d-flex gap-2">
+              <button type="button" className="btn btn-light w-100 rounded-pill" onClick={() => { setShowCropper(false); setCroppedPhotoBase64(null); setRawPhoto(null); if(photoInputRef.current) photoInputRef.current.value=''; }}>Cancel</button>
+              <button type="button" className="btn btn-primary w-100 rounded-pill shadow" onClick={() => setShowCropper(false)}>Confirm Crop</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="d-flex justify-content-between align-items-center mb-5 pb-3 border-bottom">
         <div>
           <h2 className="fw-bold h4 mb-1">{employee ? 'Modify Record' : 'Employee Registration'}</h2>
-          <p className="text-muted small mb-0">Complete all mandatory fields (*)</p>
+          <p className="text-muted small mb-0 text-uppercase tracking-wider fw-bold">Enterprise Resource Planning • Cloud Sync Active</p>
         </div>
-        <button onClick={onCancel} className="btn btn-outline-secondary btn-sm rounded-pill px-3"><X size={16} /> Cancel</button>
+        <button onClick={onCancel} className="btn btn-outline-secondary btn-sm rounded-pill px-4">Discard</button>
       </div>
 
       <form onSubmit={handleSubmit} className="row g-4">
         {/* PHOTO SECTION */}
-        <div className="col-12 text-center mb-4">
+        <div className="col-12 text-center mb-5">
           <div className="position-relative d-inline-block">
             <div 
-              className="rounded-3 border border-3 border-primary-subtle overflow-hidden bg-light shadow-sm"
+              className={`rounded-4 border border-3 overflow-hidden bg-light shadow transition-all ${croppedPhotoBase64 ? 'border-success' : 'border-primary-subtle'}`}
               style={{ width: '150px', height: '200px', cursor: 'pointer' }}
               onClick={() => photoInputRef.current?.click()}
             >
@@ -219,70 +245,77 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
               ) : formData.Employee_Photo_URL ? (
                 <img src={formData.Employee_Photo_URL} className="w-100 h-100 object-fit-cover" alt="Existing" />
               ) : (
-                <div className="w-100 h-100 d-flex flex-column align-items-center justify-content-center text-muted">
-                  <Camera size={40} className="mb-2 opacity-50" />
-                  <span className="tiny fw-bold">UPLOAD PHOTO</span>
+                <div className="w-100 h-100 d-flex flex-column align-items-center justify-content-center text-muted p-3">
+                  <Camera size={40} className="mb-2 opacity-25" />
+                  <span className="tiny fw-bold text-uppercase">Portrait Upload</span>
                 </div>
               )}
             </div>
             <button 
               type="button"
-              className="btn btn-primary btn-sm rounded-circle position-absolute bottom-0 end-0 shadow"
-              style={{ width: '40px', height: '40px', transform: 'translate(30%, 30%)' }}
+              className="btn btn-primary btn-sm rounded-circle position-absolute bottom-0 end-0 shadow-lg border-2 border-white"
+              style={{ width: '44px', height: '44px', transform: 'translate(35%, 35%)' }}
               onClick={() => photoInputRef.current?.click()}
             >
-              <Upload size={18} />
+              <Upload size={20} />
             </button>
-            <input type="file" ref={photoInputRef} className="d-none" accept="image/*" onChange={(e) => handleFileChange(e, 'photo')} />
+            <input type="file" ref={photoInputRef} className="d-none" accept="image/jpeg,image/png" onChange={(e) => handleFileChange(e, 'photo')} />
             <canvas ref={canvasRef} className="d-none" />
           </div>
-          {selectedPhoto && <div className="mt-3 tiny text-success fw-bold d-flex align-items-center justify-content-center gap-1"><Scissors size={14} /> Center-crop active (ID Scale)</div>}
+          {croppedPhotoBase64 && (
+            <div className="mt-4 animate-in">
+              <span className="badge bg-success-subtle text-success rounded-pill px-3 py-2 d-inline-flex align-items-center gap-2">
+                <Check size={14} /> ID Photo Ready (3:4 Ratio)
+              </span>
+              <button type="button" className="btn btn-link btn-sm tiny text-primary fw-bold d-block mx-auto mt-1" onClick={() => photoInputRef.current?.click()}>Change Image</button>
+            </div>
+          )}
         </div>
 
         {/* SECTION 1: IDENTITY */}
-        <div className="col-12 mt-0">
-          <div className="d-flex align-items-center gap-2 mb-3 text-primary fw-bold border-start border-4 border-primary ps-3">
-            <Hash size={18} /> Identification & Security
+        <div className="col-12 mt-2">
+          <div className="d-flex align-items-center gap-2 mb-3 text-primary fw-bold border-start border-4 border-primary ps-3 bg-primary-subtle py-2 rounded-end">
+            <Hash size={18} /> Official Identity
           </div>
         </div>
 
         <div className="col-md-4">
-          <label className="form-label small fw-bold">Employee ID *</label>
-          <input name="Employee_ID" value={formData.Employee_ID ?? ''} onChange={e => setFormData({...formData, Employee_ID: Number(e.target.value)})} readOnly={!!employee} className={`form-control bg-light ${errors.Employee_ID ? 'is-invalid' : ''}`} placeholder="Unique Record ID" />
+          <label className="form-label small fw-bold text-muted">Employee ID *</label>
+          <input name="Employee_ID" value={formData.Employee_ID ?? ''} onChange={e => setFormData({...formData, Employee_ID: Number(e.target.value)})} readOnly={!!employee} className={`form-control ${errors.Employee_ID ? 'is-invalid' : ''}`} placeholder="Record ID" />
         </div>
 
         <div className="col-md-4">
-          <label className="form-label small fw-bold">EPIC Number *</label>
-          <input value={formData.EPIC || ''} onChange={e => setFormData({...formData, EPIC: e.target.value.toUpperCase()})} className={`form-control ${errors.EPIC ? 'is-invalid' : ''}`} placeholder="Voter Card ID" />
+          <label className="form-label small fw-bold text-muted">EPIC (Voter ID) *</label>
+          <input value={formData.EPIC || ''} onChange={e => setFormData({...formData, EPIC: e.target.value.toUpperCase()})} className={`form-control ${errors.EPIC ? 'is-invalid' : ''}`} placeholder="ABC1234567" />
         </div>
 
         <div className="col-md-4">
-          <label className="form-label small fw-bold">PwD Status *</label>
+          <label className="form-label small fw-bold text-muted">PwD Category *</label>
           <select value={formData.PwD || 'No'} onChange={e => setFormData({...formData, PwD: e.target.value as 'Yes' | 'No'})} className="form-select">
-            <option value="No">No (General)</option>
+            <option value="No">No</option>
             <option value="Yes">Yes (Disabled)</option>
           </select>
         </div>
 
         {/* SECTION 2: PERSONAL */}
-        <div className="col-12 mt-5">
-          <div className="d-flex align-items-center gap-2 mb-3 text-primary fw-bold border-start border-4 border-primary ps-3">
-            <UserIcon size={18} /> Personal Details
+        <div className="col-12 mt-4">
+          <div className="d-flex align-items-center gap-2 mb-3 text-primary fw-bold border-start border-4 border-primary ps-3 bg-primary-subtle py-2 rounded-end">
+            <UserIcon size={18} /> Personal Attributes
           </div>
         </div>
 
         <div className="col-md-4">
-          <label className="form-label small fw-bold">First Name *</label>
+          <label className="form-label small fw-bold text-muted">First Name *</label>
           <input value={formData.Employee_Name || ''} onChange={e => setFormData({...formData, Employee_Name: e.target.value})} className={`form-control ${errors.Employee_Name ? 'is-invalid' : ''}`} />
         </div>
         
         <div className="col-md-4">
-          <label className="form-label small fw-bold">Surname *</label>
+          <label className="form-label small fw-bold text-muted">Surname *</label>
           <input value={formData.Employee_Surname || ''} onChange={e => setFormData({...formData, Employee_Surname: e.target.value})} className={`form-control ${errors.Employee_Surname ? 'is-invalid' : ''}`} />
         </div>
 
         <div className="col-md-4">
-          <label className="form-label small fw-bold">Gender *</label>
+          <label className="form-label small fw-bold text-muted">Gender *</label>
           <select value={formData.Gender || 'Male'} onChange={e => setFormData({...formData, Gender: e.target.value})} className="form-select">
             <option value="Male">Male</option>
             <option value="Female">Female</option>
@@ -291,154 +324,142 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
         </div>
 
         <div className="col-md-4">
-          <label className="form-label small fw-bold">Date of Birth *</label>
+          <label className="form-label small fw-bold text-muted">Date of Birth *</label>
           <input type="date" value={formData.DOB || ''} onChange={e => setFormData({...formData, DOB: e.target.value})} className={`form-control ${errors.DOB ? 'is-invalid' : ''}`} />
         </div>
 
         <div className="col-md-4">
-          <label className="form-label small fw-bold">Mobile *</label>
+          <label className="form-label small fw-bold text-muted">Mobile Number *</label>
           <div className="input-group">
-            <span className="input-group-text bg-light"><Smartphone size={14}/></span>
-            <input maxLength={10} value={formData.Mobile || ''} onChange={e => setFormData({...formData, Mobile: e.target.value})} className={`form-control ${errors.Mobile ? 'is-invalid' : ''}`} placeholder="10 digits" />
+            <span className="input-group-text bg-light text-muted"><Smartphone size={14}/></span>
+            <input maxLength={10} value={formData.Mobile || ''} onChange={e => setFormData({...formData, Mobile: e.target.value})} className={`form-control ${errors.Mobile ? 'is-invalid' : ''}`} placeholder="9876543210" />
           </div>
         </div>
 
         {/* SECTION 3: PROFESSIONAL */}
-        <div className="col-12 mt-5">
-          <div className="d-flex align-items-center gap-2 mb-3 text-primary fw-bold border-start border-4 border-primary ps-3">
-            <Briefcase size={18} /> Employment & Designation
+        <div className="col-12 mt-4">
+          <div className="d-flex align-items-center gap-2 mb-3 text-primary fw-bold border-start border-4 border-primary ps-3 bg-primary-subtle py-2 rounded-end">
+            <Briefcase size={18} /> Professional Placement
           </div>
         </div>
 
         <div className="col-md-4">
-          <label className="form-label small fw-bold">Department *</label>
+          <label className="form-label small fw-bold text-muted">Department *</label>
           <select value={formData.Department_ID ?? ''} onChange={e => setFormData({...formData, Department_ID: Number(e.target.value)})} className={`form-select ${errors.Department_ID ? 'is-invalid' : ''}`}>
-            <option value="">Choose Dept</option>
+            <option value="">-- Choose --</option>
             {data.departments.map(d => <option key={d.Department_ID} value={d.Department_ID}>{d.Department_Name}</option>)}
           </select>
         </div>
 
         <div className="col-md-4">
-          <label className="form-label small fw-bold">Office *</label>
+          <label className="form-label small fw-bold text-muted">Office *</label>
           <select value={formData.Office_ID ?? ''} onChange={e => setFormData({...formData, Office_ID: Number(e.target.value)})} className={`form-select ${errors.Office_ID ? 'is-invalid' : ''}`}>
-            <option value="">Choose Office</option>
+            <option value="">-- Choose --</option>
             {availableOffices.map(o => <option key={o.Office_ID} value={o.Office_ID}>{o.Office_Name}</option>)}
           </select>
         </div>
 
         <div className="col-md-4">
-          <label className="form-label small fw-bold">Service Type *</label>
-          <select value={formData.Service_Type || ''} onChange={e => setFormData({...formData, Service_Type: e.target.value as ServiceType})} className="form-select">
-            {Object.values(ServiceType).map(st => <option key={st} value={st}>{st}</option>)}
-          </select>
-        </div>
-
-        <div className="col-md-4">
-          <label className="form-label small fw-bold">Designation (Post) *</label>
+          <label className="form-label small fw-bold text-muted">Post (Designation) *</label>
           <select value={formData.Post_ID ?? ''} onChange={e => setFormData({...formData, Post_ID: Number(e.target.value)})} className={`form-select ${errors.Post_ID ? 'is-invalid' : ''}`}>
-            <option value="">Select Post</option>
+            <option value="">-- Choose --</option>
             {availablePosts.map(p => <option key={p.Post_ID} value={p.Post_ID}>{p.Post_Name}</option>)}
           </select>
         </div>
 
         <div className="col-md-4">
-          <label className="form-label small fw-bold">Pay Scale (Level) *</label>
+          <label className="form-label small fw-bold text-muted">Payscale Level *</label>
           <select value={formData.Pay_ID ?? ''} onChange={e => setFormData({...formData, Pay_ID: Number(e.target.value)})} className={`form-select ${errors.Pay_ID ? 'is-invalid' : ''}`}>
-            <option value="">Select Level</option>
+            <option value="">-- Choose --</option>
             {data.payscales.map(p => <option key={p.Pay_ID} value={p.Pay_ID}>{p.Pay_Name}</option>)}
           </select>
         </div>
 
+        <div className="col-md-4">
+          <label className="form-label small fw-bold text-muted">Service Type *</label>
+          <select value={formData.Service_Type || ''} onChange={e => setFormData({...formData, Service_Type: e.target.value as ServiceType})} className="form-select">
+            {Object.values(ServiceType).map(st => <option key={st} value={st}>{st}</option>)}
+          </select>
+        </div>
+
         {/* SECTION 4: BANKING */}
-        <div className="col-12 mt-5">
-          <div className="d-flex align-items-center gap-2 mb-3 text-primary fw-bold border-start border-4 border-primary ps-3">
-            <Landmark size={18} /> Banking & Payments
+        <div className="col-12 mt-4">
+          <div className="d-flex align-items-center gap-2 mb-3 text-primary fw-bold border-start border-4 border-primary ps-3 bg-primary-subtle py-2 rounded-end">
+            <Landmark size={18} /> Financial Details
           </div>
         </div>
 
         <div className="col-md-4">
-          <label className="form-label small fw-bold">Bank Name *</label>
+          <label className="form-label small fw-bold text-muted">Bank *</label>
           <select value={formData.Bank_ID ?? ''} onChange={e => setFormData({...formData, Bank_ID: Number(e.target.value), Branch_ID: undefined})} className={`form-select ${errors.Bank_ID ? 'is-invalid' : ''}`}>
-            <option value="">Select Bank</option>
+            <option value="">-- Choose --</option>
             {data.banks.map(b => <option key={b.Bank_ID} value={b.Bank_ID}>{b.Bank_Name}</option>)}
           </select>
         </div>
 
         <div className="col-md-4">
-          <label className="form-label small fw-bold">Branch *</label>
+          <label className="form-label small fw-bold text-muted">Branch *</label>
           <select value={formData.Branch_ID ?? ''} onChange={e => {
             const bId = Number(e.target.value);
             const branch = availableBranches.find(b => Number(b.Branch_ID) === bId);
             setFormData({...formData, Branch_ID: bId, IFSC_Code: branch?.IFSC_Code || ''});
           }} className={`form-select ${errors.Branch_ID ? 'is-invalid' : ''}`}>
-            <option value="">Select Branch</option>
+            <option value="">-- Choose --</option>
             {availableBranches.map(b => <option key={b.Branch_ID} value={b.Branch_ID}>{b.Branch_Name}</option>)}
           </select>
         </div>
 
         <div className="col-md-4">
-          <label className="form-label small fw-bold">IFSC Code (Verify)</label>
-          <div className="input-group">
-            <input value={formData.IFSC_Code || ''} onChange={e => setFormData({...formData, IFSC_Code: e.target.value.toUpperCase()})} className="form-control" />
-            <button type="button" onClick={handleIfscVerify} className="btn btn-outline-primary" disabled={isVerifyingIfsc}>
-              {isVerifyingIfsc ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
-            </button>
-          </div>
-        </div>
-
-        <div className="col-md-6">
-          <label className="form-label small fw-bold">Account Number *</label>
+          <label className="form-label small fw-bold text-muted">Account Number *</label>
           <div className="input-group">
             <span className="input-group-text bg-light"><CreditCard size={14}/></span>
-            <input value={formData.ACC_No || ''} onChange={e => setFormData({...formData, ACC_No: e.target.value})} className={`form-control ${errors.ACC_No ? 'is-invalid' : ''}`} placeholder="Bank Account Number" />
+            <input value={formData.ACC_No || ''} onChange={e => setFormData({...formData, ACC_No: e.target.value})} className={`form-control ${errors.ACC_No ? 'is-invalid' : ''}`} placeholder="Account No" />
           </div>
         </div>
 
         {/* SECTION 5: LIFECYCLE */}
-        <div className="col-12 mt-5">
-          <div className="d-flex align-items-center gap-2 mb-3 text-primary fw-bold border-start border-4 border-primary ps-3">
-            <Power size={18} /> Account Status
+        <div className="col-12 mt-4">
+          <div className="d-flex align-items-center gap-2 mb-3 text-primary fw-bold border-start border-4 border-primary ps-3 bg-primary-subtle py-2 rounded-end">
+            <Power size={18} /> Active Lifecycle
           </div>
         </div>
 
         <div className="col-md-4">
-          <label className="form-label small fw-bold">Current Status *</label>
-          <select value={formData.Active || 'Yes'} onChange={e => setFormData({...formData, Active: e.target.value as 'Yes' | 'No'})} className="form-select">
-            <option value="Yes">Active</option>
-            <option value="No">Inactive</option>
+          <label className="form-label small fw-bold text-muted">Account Status *</label>
+          <select value={formData.Active || 'Yes'} onChange={e => setFormData({...formData, Active: e.target.value as 'Yes' | 'No'})} className="form-select fw-bold">
+            <option value="Yes">ACTIVE</option>
+            <option value="No">INACTIVE</option>
           </select>
         </div>
 
         {formData.Active === 'No' && (
           <>
             <div className="col-md-4">
-              <label className="form-label small fw-bold">Inactivation Reason *</label>
+              <label className="form-label small fw-bold text-muted">Reason for Inactivation *</label>
               <select value={formData.DA_Reason || ''} onChange={e => setFormData({...formData, DA_Reason: e.target.value})} className={`form-select ${errors.DA_Reason ? 'is-invalid' : ''}`}>
-                <option value="">Select Reason...</option>
+                <option value="">Select...</option>
                 {DEACTIVATION_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
               </select>
             </div>
             <div className="col-md-4">
-              <label className="form-label small fw-bold d-flex justify-content-between">
-                Justification Doc * <span className="tiny text-muted fw-normal">Max 2MB</span>
+              <label className="form-label small fw-bold text-muted d-flex justify-content-between">
+                Justification Doc * <span className="tiny text-primary">Max 2MB PDF/IMG</span>
               </label>
-              <div className="input-group">
+              <div className="input-group shadow-sm">
                 <input type="file" ref={docInputRef} className={`form-control ${errors.Doc ? 'is-invalid' : ''}`} onChange={(e) => handleFileChange(e, 'doc')} accept=".pdf,image/*" />
                 {formData.Deactivation_Doc_URL && <a href={formData.Deactivation_Doc_URL} target="_blank" rel="noopener noreferrer" className="btn btn-outline-info"><ExternalLink size={16}/></a>}
               </div>
-              {selectedDoc && <div className="tiny text-success mt-1 fw-bold">File staged for upload: {selectedDoc.name}</div>}
             </div>
           </>
         )}
 
-        {/* SUBMIT BUTTONS */}
         <div className="col-12 text-end mt-5 pt-4 border-top">
-          <button type="button" onClick={onCancel} className="btn btn-light px-4 me-2">Discard Changes</button>
-          <button type="submit" className="btn btn-primary px-5 shadow-sm d-inline-flex align-items-center gap-2" disabled={isUploading}>
+          <button type="button" onClick={onCancel} className="btn btn-light px-4 me-2 rounded-pill">Cancel</button>
+          <button type="submit" className="btn btn-primary px-5 shadow-lg rounded-pill d-inline-flex align-items-center gap-2" disabled={isUploading}>
             {isUploading ? (
-              <><Loader2 size={18} className="animate-spin" /> Transmitting to Cloud...</>
+              <><Loader2 size={18} className="animate-spin" /> Transmitting...</>
             ) : (
-              <><Save size={18} /> {employee ? 'Update Employee Record' : 'Create New Record'}</>
+              <><Save size={18} /> Sync with Cloud</>
             )}
           </button>
         </div>
@@ -448,6 +469,8 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         .tiny { font-size: 0.65rem; }
         .object-fit-cover { object-fit: cover; }
+        .animate-in { animation: fadeInScale 0.4s ease-out; }
+        @keyframes fadeInScale { from { opacity: 0; transform: scale(0.98) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
       `}</style>
     </div>
   );

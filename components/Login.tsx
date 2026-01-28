@@ -30,8 +30,8 @@ const Login: React.FC<LoginProps> = ({ users, onLogin }) => {
           <div className="bg-primary d-inline-flex align-items-center justify-content-center p-3 rounded-4 shadow-lg mb-3">
             <LogIn size={40} className="text-white" />
           </div>
-          <h1 className="text-white fw-bold mb-1">Corporate Login</h1>
-          <p className="text-secondary">Please enter your workspace credentials</p>
+          <h1 className="text-white fw-bold mb-1">Officials Login</h1>
+          <p className="text-secondary">Please enter your credentials</p>
         </div>
 
         <div className="card login-card shadow-lg p-4 p-md-5">
@@ -73,7 +73,7 @@ const Login: React.FC<LoginProps> = ({ users, onLogin }) => {
             </div>
 
             <button type="submit" className="btn btn-primary w-100 py-3 fw-bold shadow-sm mb-4">
-              Access Dashboard
+              Submit
             </button>
           </form>
 
@@ -84,7 +84,7 @@ const Login: React.FC<LoginProps> = ({ users, onLogin }) => {
                 onClick={() => { setUserName('admin'); setPassword('123'); }}
                 className="btn btn-outline-primary btn-sm rounded-pill px-3"
               >
-                Administrator
+                Admin User
               </button>
               <button 
                 onClick={() => { setUserName('user1'); setPassword('123'); }}
@@ -97,7 +97,7 @@ const Login: React.FC<LoginProps> = ({ users, onLogin }) => {
         </div>
         
         <div className="text-center mt-5">
-          <p className="text-secondary small">&copy; 2024 EMS Pro • Secure Enterprise Solution</p>
+          <p className="text-secondary small">&copy; 2026 EMS • Employee Database System</p>
         </div>
       </div>
     </div>
