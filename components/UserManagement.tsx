@@ -63,6 +63,14 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, onSaveUser, onDel
     return sortConfig.direction === 'asc' ? <ChevronUp size={14} className="text-primary" /> : <ChevronDown size={14} className="text-primary" />;
   };
 
+  // Improved mapping to handle case-insensitivity from spreadsheet data
+  const getSafeUserType = (val: any): UserType => {
+    if (!val) return UserType.NORMAL;
+    const str = String(val).trim().toLowerCase();
+    if (str === 'admin') return UserType.ADMIN;
+    return UserType.NORMAL;
+  };
+
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
     if (!editingUser?.User_Name?.trim()) newErrors.User_Name = "Required";
@@ -91,47 +99,66 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, onSaveUser, onDel
             <div className="bg-primary-subtle p-2 rounded-3 text-primary"><ShieldCheck size={24} /></div>
             <div>
               <h5 className="mb-0 fw-bold">User Registry</h5>
-              <p className="text-muted small mb-0">System access control</p>
+              <p className="text-muted small mb-0">Manage system access levels and credentials</p>
             </div>
           </div>
-          <button onClick={() => setEditingUser({ User_Type: UserType.NORMAL })} className="btn btn-primary px-4 shadow-sm"><Plus size={18} className="me-2" /> Add User</button>
+          <button onClick={() => setEditingUser({ User_Type: UserType.NORMAL })} className="btn btn-primary px-4 shadow-sm d-flex align-items-center gap-2">
+            <Plus size={18} /> Add User
+          </button>
         </div>
 
         <div className="row g-3">
-          <div className="col-md-6">
+          <div className="col-md-5">
             <div className="input-group shadow-sm">
-              <span className="input-group-text bg-white border-end-0 ps-3"><Search size={16} /></span>
-              <input type="text" className="form-control border-start-0" placeholder="Search accounts..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+              <span className="input-group-text bg-white border-end-0 ps-3 text-muted"><Search size={16} /></span>
+              <input type="text" className="form-control border-start-0" placeholder="Search by username..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
             </div>
           </div>
+          <div className="col-md-4">
+            <select className="form-select shadow-sm" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+              <option value="">All Access Levels</option>
+              <option value={UserType.ADMIN}>Administrators</option>
+              <option value={UserType.NORMAL}>Normal Users</option>
+            </select>
+          </div>
           <div className="col-md-3">
-            <button onClick={() => { setSearchTerm(''); setTypeFilter(''); }} className="btn btn-outline-secondary w-100 shadow-sm border-2 fw-semibold">Reset</button>
+            <button onClick={() => { setSearchTerm(''); setTypeFilter(''); }} className="btn btn-outline-secondary w-100 shadow-sm border-2 fw-semibold">Reset Filters</button>
           </div>
         </div>
       </div>
 
       <div className="card-body p-0">
         {editingUser && (
-          <div className="bg-light p-4 border-bottom animate-fade-in">
+          <div className="bg-light p-4 border-bottom animate-fade-in shadow-inner">
+            <div className="d-flex justify-content-between align-items-center mb-3">
+              <h6 className="fw-bold mb-0 text-primary">{editingUser.User_ID ? 'Modify System Credentials' : 'Register New User Account'}</h6>
+              <button type="button" onClick={() => setEditingUser(null)} className="btn btn-sm btn-link text-muted p-0"><X size={20} /></button>
+            </div>
             <form onSubmit={handleSave} className="row g-3">
               <div className="col-md-4">
-                <label className="form-label small fw-bold">Username</label>
-                <input required value={editingUser.User_Name || ''} onChange={e => setEditingUser({...editingUser, User_Name: e.target.value})} className="form-control" />
+                <label className="form-label small fw-bold">Username *</label>
+                <div className="input-group">
+                  <span className="input-group-text bg-white border-end-0 text-muted"><UserIcon size={16} /></span>
+                  <input required value={editingUser.User_Name || ''} onChange={e => setEditingUser({...editingUser, User_Name: e.target.value})} className={`form-control border-start-0 ps-1 ${errors.User_Name ? 'is-invalid' : ''}`} placeholder="e.g. jdoe_admin" />
+                </div>
               </div>
               <div className="col-md-4">
-                <label className="form-label small fw-bold">Password</label>
-                <input type="password" required value={editingUser.Password || ''} onChange={e => setEditingUser({...editingUser, Password: e.target.value})} className="form-control" />
+                <label className="form-label small fw-bold">Password *</label>
+                <div className="input-group">
+                  <span className="input-group-text bg-white border-end-0 text-muted"><Lock size={16} /></span>
+                  <input type="password" required value={editingUser.Password || ''} onChange={e => setEditingUser({...editingUser, Password: e.target.value})} className={`form-control border-start-0 ps-1 ${errors.Password ? 'is-invalid' : ''}`} placeholder="••••••••" />
+                </div>
               </div>
               <div className="col-md-4">
-                <label className="form-label small fw-bold">Role</label>
-                <select required value={editingUser.User_Type || ''} onChange={e => setEditingUser({...editingUser, User_Type: e.target.value as UserType})} className="form-select">
-                  <option value={UserType.NORMAL}>Normal User</option>
-                  <option value={UserType.ADMIN}>Administrator</option>
+                <label className="form-label small fw-bold">User Access Level *</label>
+                <select required value={getSafeUserType(editingUser.User_Type)} onChange={e => setEditingUser({...editingUser, User_Type: e.target.value as UserType})} className="form-select">
+                  <option value={UserType.NORMAL}>Normal User (Restricted View)</option>
+                  <option value={UserType.ADMIN}>Administrator (Full Access)</option>
                 </select>
               </div>
-              <div className="col-12 text-end">
-                <button type="button" onClick={() => setEditingUser(null)} className="btn btn-light me-2">Cancel</button>
-                <button type="submit" className="btn btn-primary shadow-sm"><Save size={18} className="me-2" /> Save User</button>
+              <div className="col-12 text-end pt-2">
+                <button type="button" onClick={() => setEditingUser(null)} className="btn btn-light px-4 me-2">Cancel</button>
+                <button type="submit" className="btn btn-primary px-4 shadow-sm"><Save size={18} className="me-2" /> Save Account</button>
               </div>
             </form>
           </div>
@@ -142,7 +169,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, onSaveUser, onDel
             <thead className="table-light">
               <tr>
                 <th className="ps-4 cursor-pointer" onClick={() => requestSort('User_Name')}>
-                  <div className="d-flex align-items-center gap-1">User Identity {getSortIcon('User_Name')}</div>
+                  <div className="d-flex align-items-center gap-1">Identity {getSortIcon('User_Name')}</div>
                 </th>
                 <th className="cursor-pointer" onClick={() => requestSort('User_Type')}>
                   <div className="d-flex align-items-center gap-1">Access Level {getSortIcon('User_Type')}</div>
@@ -154,22 +181,25 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, onSaveUser, onDel
               {paginatedItems.map(user => (
                 <tr key={user.User_ID}>
                   <td className="ps-4">
-                    <div className="fw-bold">{user.User_Name}</div>
-                    <div className="small text-muted">ID: #{user.User_ID}</div>
+                    <div className="fw-bold text-dark">{user.User_Name}</div>
+                    <div className="tiny text-muted uppercase">SYSTEM ID: #{user.User_ID}</div>
                   </td>
                   <td>
-                    <span className={`badge ${user.User_Type === UserType.ADMIN ? 'bg-primary' : 'bg-success-subtle text-success border border-success-subtle'} rounded-pill px-3`}>
+                    <span className={`badge ${user.User_Type === UserType.ADMIN ? 'bg-primary' : 'bg-success-subtle text-success border border-success-subtle'} rounded-pill px-3 py-1`}>
                       {user.User_Type}
                     </span>
                   </td>
                   <td className="text-end pe-4">
                     <div className="d-flex gap-2 justify-content-end">
-                      <button onClick={() => setEditingUser(user)} className="btn btn-light btn-sm rounded-3 border text-primary shadow-sm"><Edit2 size={16} /></button>
-                      <button onClick={() => onDeleteUser(user.User_ID)} className="btn btn-light btn-sm rounded-3 border text-danger shadow-sm"><Trash2 size={16} /></button>
+                      <button onClick={() => setEditingUser(user)} className="btn btn-light btn-sm rounded-3 border text-primary shadow-sm" title="Edit Profile"><Edit2 size={16} /></button>
+                      <button onClick={() => onDeleteUser(user.User_ID)} className="btn btn-light btn-sm rounded-3 border text-danger shadow-sm" title="Remove Account"><Trash2 size={16} /></button>
                     </div>
                   </td>
                 </tr>
               ))}
+              {paginatedItems.length === 0 && (
+                <tr><td colSpan={3} className="text-center py-5 text-muted">No accounts found.</td></tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -201,6 +231,13 @@ const UserManagement: React.FC<UserManagementProps> = ({ data, onSaveUser, onDel
           </nav>
         )}
       </div>
+      <style>{`
+        .cursor-pointer { cursor: pointer; user-select: none; }
+        .cursor-pointer:hover { background-color: #f8fafc; }
+        .tiny { font-size: 0.65rem; font-weight: 700; }
+        .animate-fade-in { animation: fadeIn 0.2s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+      `}</style>
     </div>
   );
 };
