@@ -86,6 +86,24 @@ function upsertRow(ss, sheetName, data) {
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   const idKey = headers[0];
   const idValue = data[idKey];
+
+  // EMPLOYEE PHOTO UPLOAD
+  if (data.photoData && data.photoData.base64) {
+    try {
+      const photoUrl = uploadFileToDrive(data.photoData, "EMS_Employee_Photos");
+      data.Employee_Photo_URL = photoUrl;
+    } catch (e) { console.error("Photo Upload Failed: " + e.toString()); }
+    delete data.photoData;
+  }
+
+  // DEACTIVATION DOC UPLOAD
+  if (data.fileData && data.fileData.base64) {
+    try {
+      const fileUrl = uploadFileToDrive(data.fileData, "EMS_Deactivation_Docs");
+      data.Deactivation_Doc_URL = fileUrl;
+    } catch (e) { console.error("Doc Upload Failed: " + e.toString()); }
+    delete data.fileData;
+  }
   
   const vals = sheet.getDataRange().getValues();
   let rowIndex = -1;
@@ -102,6 +120,24 @@ function upsertRow(ss, sheetName, data) {
   } else {
     sheet.appendRow(rowData);
   }
+}
+
+function uploadFileToDrive(fileData, folderName) {
+  let folder;
+  const folders = DriveApp.getFoldersByName(folderName);
+  if (folders.hasNext()) {
+    folder = folders.next();
+  } else {
+    folder = DriveApp.createFolder(folderName);
+  }
+
+  const contentType = fileData.mimeType;
+  const decodedData = Utilities.base64Decode(fileData.base64);
+  const blob = Utilities.newBlob(decodedData, contentType, fileData.name);
+  const file = folder.createFile(blob);
+  
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  return file.getUrl();
 }
 
 function deleteRow(ss, sheetName, idKey, idValue) {
@@ -129,39 +165,13 @@ function getSelectionData(ss) {
   
   const map = {};
   vals.forEach(r => {
-    // Normalize User_ID: Remove potential decimals like 1.0 -> 1
     const rawUid = r[0].toString().trim();
     const uId = rawUid.includes('.') ? Math.floor(parseFloat(rawUid)).toString() : rawUid;
-    
     if (!map[uId]) map[uId] = [];
-    
     const pVal = r[1].toString().trim();
-    
-    // Check if cell contains a JSON array string e.g., "[2350, 4083]"
-    if (pVal.startsWith('[') && pVal.endsWith(']')) {
-      try {
-        const arr = JSON.parse(pVal);
-        if (Array.isArray(arr)) {
-          arr.forEach(id => {
-            const nid = parseInt(id.toString().replace(/\.0$/, ''));
-            if (!isNaN(nid)) map[uId].push(nid);
-          });
-          return; // Continue to next row in forEach
-        }
-      } catch(e) { /* ignore parse error and try standard parse below */ }
-    }
-
     const pId = parseInt(pVal.replace(/\.0$/, ''));
-    if (!isNaN(pId)) {
-      map[uId].push(pId);
-    }
+    if (!isNaN(pId)) map[uId].push(pId);
   });
-  
-  // Ensure unique IDs in each list
-  Object.keys(map).forEach(key => {
-    map[key] = [...new Set(map[key])];
-  });
-  
   return map;
 }
 
@@ -171,29 +181,14 @@ function updateSelections(ss, payload) {
     sheet = ss.insertSheet('UserPostSelections');
     sheet.appendRow(['User_ID', 'Post_ID']);
   }
-  
-  const rawUid = payload.User_ID.toString().trim();
-  const userId = rawUid.includes('.') ? Math.floor(parseFloat(rawUid)).toString() : rawUid;
+  const userId = Math.floor(Number(payload.User_ID));
   const postIds = payload.Post_IDs;
-  
   const vals = sheet.getDataRange().getValues();
-  // Clean existing mappings
   for (let i = vals.length - 1; i >= 1; i--) {
-    const rowUid = vals[i][0].toString().trim();
-    const cleanRowUid = rowUid.includes('.') ? Math.floor(parseFloat(rowUid)).toString() : rowUid;
-    if (cleanRowUid == userId) {
-      sheet.deleteRow(i + 1);
-    }
+    if (Math.floor(Number(vals[i][0])) == userId) sheet.deleteRow(i + 1);
   }
-  
-  // Re-insert mappings as individual rows for maximum compatibility
   if (Array.isArray(postIds)) {
-    postIds.forEach(pId => {
-      const cleanPid = Math.floor(Number(pId));
-      if (!isNaN(cleanPid)) {
-        sheet.appendRow([parseInt(userId), cleanPid]);
-      }
-    });
+    postIds.forEach(pId => sheet.appendRow([userId, Math.floor(Number(pId))]));
   }
 }
 ```

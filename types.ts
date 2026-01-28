@@ -92,9 +92,11 @@ export interface Employee {
   Branch_ID: number;
   ACC_No: string;
   IFSC_Code: string;
+  Employee_Photo_URL?: string;
   // Lifecycle Management
   Active: 'Yes' | 'No';
   DA_Reason?: string;
+  Deactivation_Doc_URL?: string;
   T_STMP_ADD: string;
   T_STMP_UPD: string;
 }
