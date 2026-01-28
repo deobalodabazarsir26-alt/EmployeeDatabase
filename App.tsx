@@ -17,7 +17,7 @@ import ServiceMasterManagement from './components/ServiceMasterManagement';
 import { LogOut, RefreshCw, CheckCircle, AlertCircle, Clock } from 'lucide-react';
 
 // Robust ID generation for multi-user environments
-const generateUniqueId = () => Number(`${Date.now()}${Math.floor(Math.random() * 1000)}`);
+export const generateUniqueId = () => Number(`${Date.now()}${Math.floor(Math.random() * 1000)}`);
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
@@ -227,7 +227,7 @@ export default function App() {
     const exists = data.banks.find(b => Math.floor(Number(b.Bank_ID)) === Math.floor(Number(bank.Bank_ID)));
     const finalBank = exists
       ? { ...bank, T_STMP_ADD: exists.T_STMP_ADD, T_STMP_UPD: now }
-      : { ...bank, Bank_ID: generateUniqueId(), T_STMP_ADD: now, T_STMP_UPD: now };
+      : { ...bank, Bank_ID: bank.Bank_ID || generateUniqueId(), T_STMP_ADD: now, T_STMP_UPD: now };
     const newBanks = exists
       ? data.banks.map(b => Math.floor(Number(b.Bank_ID)) === Math.floor(Number(bank.Bank_ID)) ? finalBank : b)
       : [...data.banks, finalBank];
@@ -250,7 +250,7 @@ export default function App() {
     const exists = data.branches.find(b => Math.floor(Number(b.Branch_ID)) === Math.floor(Number(branch.Branch_ID)));
     const finalBranch = exists
       ? { ...branch, T_STMP_ADD: exists.T_STMP_ADD, T_STMP_UPD: now }
-      : { ...branch, Branch_ID: generateUniqueId(), T_STMP_ADD: now, T_STMP_UPD: now };
+      : { ...branch, Branch_ID: branch.Branch_ID || generateUniqueId(), T_STMP_ADD: now, T_STMP_UPD: now };
     const newBranches = exists
       ? data.branches.map(b => Math.floor(Number(b.Branch_ID)) === Math.floor(Number(branch.Branch_ID)) ? finalBranch : b)
       : [...data.branches, finalBranch];
@@ -380,6 +380,8 @@ export default function App() {
           data={data}
           currentUser={currentUser}
           onSave={upsertEmployee}
+          onSaveBank={upsertBank}
+          onSaveBranch={upsertBranch}
           onCancel={() => { setEditingEmployee(null); setActiveTab('employees'); }}
         />
       );

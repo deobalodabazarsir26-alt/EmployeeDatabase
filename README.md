@@ -91,7 +91,7 @@ function upsertRow(ss, sheetName, data) {
   if (data.photoData && data.photoData.base64) {
     try {
       const photoUrl = uploadFileToDrive(data.photoData, "EMS_Employee_Photos");
-      data.Employee_Photo_URL = photoUrl;
+      data.Photo = photoUrl;
     } catch (e) { console.error("Photo Upload Failed: " + e.toString()); }
     delete data.photoData;
   }
@@ -100,7 +100,7 @@ function upsertRow(ss, sheetName, data) {
   if (data.fileData && data.fileData.base64) {
     try {
       const fileUrl = uploadFileToDrive(data.fileData, "EMS_Deactivation_Docs");
-      data.Deactivation_Doc_URL = fileUrl;
+      data.DA_Doc = fileUrl;
     } catch (e) { console.error("Doc Upload Failed: " + e.toString()); }
     delete data.fileData;
   }

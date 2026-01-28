@@ -58,11 +58,11 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUse
         <div className="d-flex align-items-center gap-3">
           <div className="input-group shadow-sm" style={{ maxWidth: '300px' }}>
             <span className="input-group-text bg-white border-end-0 text-muted ps-3"><Search size={16} /></span>
-            <input type="text" className="form-control border-start-0" placeholder="Search ID or Name..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+            <input type="text" className="form-control border-start-0" placeholder="Search records..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
           </div>
         </div>
         <button onClick={onAddNew} className="btn btn-primary d-inline-flex align-items-center gap-2 px-4 shadow-sm">
-          <Plus size={18} /> Add New
+          <Plus size={18} /> Register New
         </button>
       </div>
 
@@ -70,13 +70,13 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUse
         <table className="table table-hover align-middle mb-0">
           <thead>
             <tr className="bg-light tiny text-uppercase">
-              <th className="ps-4" style={{ width: '80px' }}>Identity</th>
+              <th className="ps-4" style={{ width: '80px' }}>ID Portrait</th>
               <th className="cursor-pointer" onClick={() => requestSort('Employee_Name')}>
-                Name {sortConfig?.key === 'Employee_Name' && (sortConfig.direction === 'asc' ? <ChevronUp size={12}/> : <ChevronDown size={12}/>)}
+                Full Name {sortConfig?.key === 'Employee_Name' && (sortConfig.direction === 'asc' ? <ChevronUp size={12}/> : <ChevronDown size={12}/>)}
               </th>
               <th>Status</th>
               <th>Designation</th>
-              <th className="text-end pe-4">Actions</th>
+              <th className="text-end pe-4">Manage</th>
             </tr>
           </thead>
           <tbody>
@@ -89,8 +89,8 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUse
                 <tr key={emp.Employee_ID}>
                   <td className="ps-4">
                     <div className="rounded-3 border overflow-hidden bg-light d-flex align-items-center justify-content-center shadow-sm" style={{ width: '48px', height: '60px' }}>
-                      {emp.Employee_Photo_URL ? (
-                        <img src={emp.Employee_Photo_URL} className="w-100 h-100 object-fit-cover" alt="Profile" />
+                      {emp.Photo ? (
+                        <img src={emp.Photo} className="w-100 h-100 object-fit-cover" alt="Profile" />
                       ) : (
                         <span className="fw-bold text-primary small">{initials}</span>
                       )}
@@ -98,13 +98,13 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUse
                   </td>
                   <td>
                     <div className="fw-bold text-dark">{emp.Employee_Name} {emp.Employee_Surname}</div>
-                    <div className="tiny text-muted uppercase">ID: #{emp.Employee_ID} • {emp.Gender}</div>
+                    <div className="tiny text-muted uppercase">EMP ID: #{emp.Employee_ID} • {emp.Gender}</div>
                   </td>
                   <td>
                     {isActive ? (
-                      <span className="badge bg-success-subtle text-success rounded-pill px-3">Active</span>
+                      <span className="badge bg-success-subtle text-success rounded-pill px-3">Deployed</span>
                     ) : (
-                      <span className="badge bg-danger-subtle text-danger rounded-pill px-3">Inactive ({emp.DA_Reason})</span>
+                      <span className="badge bg-danger-subtle text-danger rounded-pill px-3">Deactivated ({emp.DA_Reason})</span>
                     )}
                   </td>
                   <td><span className="badge bg-primary-subtle text-primary fw-normal border border-primary-subtle px-2">{post}</span></td>
