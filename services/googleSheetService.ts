@@ -29,8 +29,9 @@ export const syncService = {
     
     console.log(`Cloud Sync Initiated: [${action}]`, payload);
     
+    // Increased timeout to 90s for large file uploads
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000);
+    const timeoutId = setTimeout(() => controller.abort(), 90000);
 
     try {
       const response = await fetch(GSHEET_API_URL, {

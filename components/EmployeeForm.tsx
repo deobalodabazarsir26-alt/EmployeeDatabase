@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Employee, AppData, ServiceType, User, UserType, Bank, BankBranch } from '../types';
 import { Save, X, Info, User as UserIcon, Briefcase, Landmark, AlertCircle, Hash, Activity, Search, Loader2, Power, FileText, Upload, ExternalLink, Camera, Scissors, Smartphone, CreditCard, Crop, Check, ZoomIn, ZoomOut, Move } from 'lucide-react';
@@ -39,11 +38,9 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   
-  // Use refs for dragging to avoid stale state in high-frequency event listeners
   const dragStartRef = useRef({ x: 0, y: 0 });
   const offsetRef = useRef({ x: 0, y: 0 });
 
-  // Sync ref with state for initialization and manual updates
   useEffect(() => {
     offsetRef.current = offset;
   }, [offset]);
@@ -59,12 +56,6 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
     }
     return [];
   });
-
-  const posts = data.posts || [];
-  const selections = data.userPostSelections?.[Math.floor(Number(currentUser.User_ID))] || [];
-  const availablePosts = currentUser.User_Type === UserType.ADMIN 
-    ? posts 
-    : posts.filter(p => selections.includes(Math.floor(Number(p.Post_ID))));
 
   useEffect(() => {
     if (formData.Department_ID !== undefined && data.offices) {
@@ -95,12 +86,9 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
     if (canvas.height !== targetHeight) canvas.height = targetHeight;
 
     ctx.clearRect(0, 0, targetWidth, targetHeight);
-    
-    // Fill background
-    ctx.fillStyle = '#f1f5f9';
+    ctx.fillStyle = '#1e293b'; // Dark background for focus
     ctx.fillRect(0, 0, targetWidth, targetHeight);
 
-    // Calculate base scale to cover the canvas (aspect-fill)
     const scaleX = targetWidth / sourceImage.width;
     const scaleY = targetHeight / sourceImage.height;
     const baseScale = Math.max(scaleX, scaleY);
@@ -109,18 +97,16 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
     const drawWidth = sourceImage.width * finalScale;
     const drawHeight = sourceImage.height * finalScale;
 
-    // Use translation matrix for better handling of zoom + pan
-    // Origin is at canvas center
     ctx.save();
+    // Use canvas center as translation origin for stable zoom
     ctx.translate(targetWidth / 2 + offset.x, targetHeight / 2 + offset.y);
     ctx.drawImage(sourceImage, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
     ctx.restore();
 
-    // Visual guide overlay
-    ctx.strokeStyle = 'rgba(79, 70, 229, 0.3)';
+    // Visual guide frame
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
     ctx.setLineDash([5, 5]);
-    ctx.lineWidth = 1;
-    ctx.strokeRect(2, 2, targetWidth - 4, targetHeight - 4);
+    ctx.strokeRect(5, 5, targetWidth - 10, targetHeight - 10);
     ctx.setLineDash([]);
   }, [sourceImage, zoom, offset]);
 
@@ -138,7 +124,6 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
       const canvas = displayCanvasRef.current;
       if (canvas) {
         const rect = canvas.getBoundingClientRect();
-        // Calculate movement relative to visible canvas scale
         const scaleX = canvas.width / rect.width;
         const scaleY = canvas.height / rect.height;
         
@@ -148,22 +133,16 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
         offsetRef.current = { x: newX, y: newY };
         setOffset({ x: newX, y: newY });
       }
-      
       dragStartRef.current = { x: clientX, y: clientY };
     };
 
-    const onMouseMove = (e: MouseEvent) => {
-      handleGlobalMove(e.clientX, e.clientY);
-    };
-
+    const onMouseMove = (e: MouseEvent) => handleGlobalMove(e.clientX, e.clientY);
     const onTouchMove = (e: TouchEvent) => {
       if (e.touches.length === 1) {
-        // Prevent scrolling while dragging image
-        e.preventDefault();
+        e.preventDefault(); // Block scrolling
         handleGlobalMove(e.touches[0].clientX, e.touches[0].clientY);
       }
     };
-
     const onEnd = () => setIsDragging(false);
 
     window.addEventListener('mousemove', onMouseMove);
@@ -180,7 +159,6 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
   }, [isDragging]);
 
   const handleStartDrag = (e: React.MouseEvent | React.TouchEvent, clientX: number, clientY: number) => {
-    // Prevent default to avoid browser image dragging or text selection
     if (e.cancelable) e.preventDefault();
     setIsDragging(true);
     dragStartRef.current = { x: clientX, y: clientY };
@@ -188,7 +166,8 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
 
   const confirmCrop = () => {
     if (!displayCanvasRef.current) return;
-    const dataUrl = displayCanvasRef.current.toDataURL('image/jpeg', 0.85);
+    // Export at high quality for cloud storage
+    const dataUrl = displayCanvasRef.current.toDataURL('image/jpeg', 0.9);
     setCroppedPhotoBase64(dataUrl.split(',')[1]);
     setShowCropper(false);
   };
@@ -204,7 +183,6 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
     if (!formData.EPIC?.trim()) newErrors.EPIC = "Required";
     if (!formData.Department_ID) newErrors.Department_ID = "Required";
     if (!formData.Office_ID) newErrors.Office_ID = "Required";
-    if (!formData.Service_Type) newErrors.Service_Type = "Required";
     if (!formData.Post_ID) newErrors.Post_ID = "Required";
     if (!formData.Pay_ID) newErrors.Pay_ID = "Required";
     if (!formData.ACC_No) newErrors.ACC_No = "Required";
@@ -231,7 +209,6 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
     if (details) {
       let bank = data.banks.find(b => b.Bank_Name.toLowerCase().trim() === details.BANK.toLowerCase().trim());
       let targetBankId: number;
-      
       if (!bank) {
         targetBankId = generateUniqueId();
         onSaveBank({ Bank_ID: targetBankId, Bank_Name: details.BANK });
@@ -241,7 +218,6 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
 
       let branch = data.branches.find(b => b.IFSC_Code === details.IFSC);
       let targetBranchId: number;
-      
       if (!branch) {
         targetBranchId = generateUniqueId();
         onSaveBranch({ Branch_ID: targetBranchId, Branch_Name: details.BRANCH, IFSC_Code: details.IFSC, Bank_ID: targetBankId });
@@ -256,7 +232,6 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
         Branch_ID: targetBranchId,
         IFSC_Code: details.IFSC
       }));
-      
       alert(`Verified: ${details.BANK}, ${details.BRANCH}`);
     } else {
       alert('IFSC code not found.');
@@ -266,7 +241,10 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
   const toBase64 = (file: File): Promise<string> => new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
-    reader.onload = () => resolve((reader.result as string).split(',')[1]);
+    reader.onload = () => {
+      const base64 = (reader.result as string).split(',')[1];
+      resolve(base64);
+    };
     reader.onerror = reject;
   });
 
@@ -274,26 +252,31 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
     e.preventDefault();
     if (validate()) {
       setIsUploading(true);
-      let payload = { ...formData };
+      const payload: any = { ...formData };
       try {
+        // Handle Cropped Image Data
         if (croppedPhotoBase64) {
-          (payload as any).photoData = {
+          payload.photoData = {
             base64: croppedPhotoBase64,
-            name: `emp_photo_${formData.Employee_ID}.jpg`,
+            name: `emp_${formData.Employee_ID}_${Date.now()}.jpg`,
             mimeType: 'image/jpeg'
           };
         }
+        
+        // Handle Document Data
         if (selectedDoc) {
-          const base64 = await toBase64(selectedDoc);
-          (payload as any).fileData = {
-            base64: base64,
-            name: selectedDoc.name,
+          const docBase64 = await toBase64(selectedDoc);
+          payload.fileData = {
+            base64: docBase64,
+            name: `doc_${formData.Employee_ID}_${selectedDoc.name.replace(/\s+/g, '_')}`,
             mimeType: selectedDoc.type
           };
         }
+        
         onSave(payload as Employee);
       } catch (err) {
-        alert('Sync Error. Please try again.');
+        console.error("Submission error:", err);
+        alert('File processing error. Ensure files are under 2MB.');
         setIsUploading(false);
       }
     }
@@ -303,7 +286,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       if (file.size > MAX_FILE_SIZE_BYTES) {
-        alert("File size must be under 2MB.");
+        alert("File size limit is 2MB.");
         e.target.value = '';
         return;
       }
@@ -326,52 +309,38 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
     }
   };
 
+  const availablePosts = data.posts || [];
+
   return (
     <div className="card shadow-lg border-0 p-4 p-md-5 animate-in">
       {/* CROPPER OVERLAY */}
       {showCropper && (
-        <div className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style={{ zIndex: 3000, backgroundColor: 'rgba(15, 23, 42, 0.95)', backdropFilter: 'blur(12px)' }}>
+        <div className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style={{ zIndex: 3000, backgroundColor: 'rgba(15, 23, 42, 0.96)', backdropFilter: 'blur(10px)' }}>
           <div className="bg-white p-4 rounded-4 shadow-2xl text-center" style={{ maxWidth: '440px', width: '90%' }}>
             <h6 className="fw-bold mb-3 d-flex align-items-center justify-content-center gap-2">
-              <Scissors size={20} className="text-primary" /> Portrait Frame Adjustment
+              <Scissors size={20} className="text-primary" /> Profile Photo Alignment
             </h6>
-            
             <div 
-              className="position-relative mb-4 mx-auto border rounded-3 overflow-hidden bg-dark shadow-inner" 
+              className="position-relative mb-4 mx-auto border-0 rounded-3 overflow-hidden bg-dark shadow-inner" 
               style={{ width: '300px', height: '400px', cursor: isDragging ? 'grabbing' : 'grab', touchAction: 'none' }}
               onMouseDown={(e) => handleStartDrag(e, e.clientX, e.clientY)}
               onTouchStart={(e) => handleStartDrag(e, e.touches[0].clientX, e.touches[0].clientY)}
             >
-              <canvas 
-                ref={displayCanvasRef} 
-                className="w-100 h-100"
-                style={{ pointerEvents: 'none' }}
-              />
-              <div className="position-absolute top-0 start-0 w-100 h-100 pointer-events-none border border-white border-2 opacity-50 shadow-inner"></div>
+              <canvas ref={displayCanvasRef} className="w-100 h-100" style={{ pointerEvents: 'none' }} />
             </div>
-
             <div className="mb-4">
               <div className="d-flex align-items-center gap-3 mb-2 px-3">
                 <ZoomOut size={18} className="text-muted" />
-                <input 
-                  type="range" 
-                  className="form-range" 
-                  min="1" 
-                  max="4" 
-                  step="0.01" 
-                  value={zoom} 
-                  onChange={(e) => setZoom(parseFloat(e.target.value))} 
-                />
+                <input type="range" className="form-range" min="1" max="4" step="0.01" value={zoom} onChange={(e) => setZoom(parseFloat(e.target.value))} />
                 <ZoomIn size={18} className="text-muted" />
               </div>
               <div className="tiny text-primary fw-bold text-uppercase d-flex align-items-center justify-content-center gap-2">
-                <Move size={14} /> Hold and drag image to center face
+                <Move size={14} /> Drag the image to center face within frame
               </div>
             </div>
-
             <div className="d-flex gap-2">
               <button type="button" className="btn btn-light border w-100 rounded-pill fw-bold" onClick={() => setShowCropper(false)}>Cancel</button>
-              <button type="button" className="btn btn-primary w-100 rounded-pill shadow-sm fw-bold" onClick={confirmCrop}>Done</button>
+              <button type="button" className="btn btn-primary w-100 rounded-pill shadow-sm fw-bold" onClick={confirmCrop}>Align & Save</button>
             </div>
           </div>
         </div>
@@ -379,10 +348,10 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
 
       <div className="d-flex justify-content-between align-items-center mb-5 pb-3 border-bottom">
         <div>
-          <h2 className="fw-bold h4 mb-1">{employee ? 'Update Personnel File' : 'Register New Personnel'}</h2>
-          <p className="text-muted small mb-0 text-uppercase tracking-wider fw-bold">Enterprise Identity & Resource Management</p>
+          <h2 className="fw-bold h4 mb-1">{employee ? 'Update Personnel Record' : 'Register New Personnel'}</h2>
+          <p className="text-muted small mb-0 text-uppercase tracking-wider fw-bold">Enterprise Cloud Sync Active</p>
         </div>
-        <button onClick={onCancel} className="btn btn-outline-secondary btn-sm rounded-pill px-4">Close Form</button>
+        <button onClick={onCancel} className="btn btn-outline-secondary btn-sm rounded-pill px-4">Discard</button>
       </div>
 
       <form onSubmit={handleSubmit} className="row g-4">
@@ -395,22 +364,17 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
               onClick={() => photoInputRef.current?.click()}
             >
               {croppedPhotoBase64 ? (
-                <img src={`data:image/jpeg;base64,${croppedPhotoBase64}`} className="w-100 h-100 object-fit-cover" alt="Profile" />
+                <img src={`data:image/jpeg;base64,${croppedPhotoBase64}`} className="w-100 h-100 object-fit-cover" alt="New" />
               ) : formData.Photo ? (
                 <img src={formData.Photo} className="w-100 h-100 object-fit-cover" alt="Existing" />
               ) : (
                 <div className="w-100 h-100 d-flex flex-column align-items-center justify-content-center text-muted p-3 bg-white">
                   <Camera size={44} className="mb-2 text-primary opacity-25" />
-                  <span className="tiny fw-bold text-uppercase text-primary">Upload ID Photo</span>
+                  <span className="tiny fw-bold text-uppercase text-primary">Capture Photo</span>
                 </div>
               )}
             </div>
-            <button 
-              type="button"
-              className="btn btn-primary btn-sm rounded-circle position-absolute bottom-0 end-0 shadow-lg border-3 border-white"
-              style={{ width: '48px', height: '48px', transform: 'translate(25%, 25%)' }}
-              onClick={() => photoInputRef.current?.click()}
-            >
+            <button type="button" className="btn btn-primary btn-sm rounded-circle position-absolute bottom-0 end-0 shadow-lg border-3 border-white" style={{ width: '48px', height: '48px', transform: 'translate(25%, 25%)' }} onClick={() => photoInputRef.current?.click()}>
               <Upload size={20} />
             </button>
             <input type="file" ref={photoInputRef} className="d-none" accept="image/jpeg,image/png" onChange={(e) => handleFileChange(e, 'photo')} />
@@ -424,7 +388,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
             <div className="row g-3">
                 <div className="col-md-4">
                     <label className="form-label small fw-bold text-muted">Employee ID *</label>
-                    <input name="Employee_ID" value={formData.Employee_ID ?? ''} onChange={e => setFormData({...formData, Employee_ID: Number(e.target.value)})} readOnly={!!employee} className={`form-control fw-bold ${errors.Employee_ID ? 'is-invalid' : ''}`} placeholder="Unique ID" />
+                    <input name="Employee_ID" value={formData.Employee_ID ?? ''} onChange={e => setFormData({...formData, Employee_ID: Number(e.target.value)})} readOnly={!!employee} className={`form-control fw-bold ${errors.Employee_ID ? 'is-invalid' : ''}`} placeholder="ID No" />
                 </div>
                 <div className="col-md-4">
                     <label className="form-label small fw-bold text-muted">Voter ID (EPIC) *</label>
@@ -435,39 +399,36 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
                     <input type="date" value={formData.DOB || ''} onChange={e => setFormData({...formData, DOB: e.target.value})} className={`form-control ${errors.DOB ? 'is-invalid' : ''}`} />
                 </div>
                 <div className="col-md-6">
-                    <label className="form-label small fw-bold text-muted">Primary Mobile *</label>
+                    <label className="form-label small fw-bold text-muted">Mobile Number *</label>
                     <div className="input-group">
-                        <span className="input-group-text bg-white"><Smartphone size={14}/></span>
-                        <input maxLength={10} value={formData.Mobile || ''} onChange={e => setFormData({...formData, Mobile: e.target.value})} className={`form-control fw-bold ${errors.Mobile ? 'is-invalid' : ''}`} placeholder="10 Digits" />
+                        <span className="input-group-text bg-white border-end-0"><Smartphone size={14}/></span>
+                        <input maxLength={10} value={formData.Mobile || ''} onChange={e => setFormData({...formData, Mobile: e.target.value})} className={`form-control fw-bold border-start-0 ps-1 ${errors.Mobile ? 'is-invalid' : ''}`} placeholder="10 Digits" />
                     </div>
                 </div>
                 <div className="col-md-6">
-                    <label className="form-label small fw-bold text-muted">PwD Category *</label>
+                    <label className="form-label small fw-bold text-muted">PwD Status *</label>
                     <select value={formData.PwD || 'No'} onChange={e => setFormData({...formData, PwD: e.target.value as 'Yes' | 'No'})} className="form-select">
-                        <option value="No">Not Applicable</option>
-                        <option value="Yes">Divyang / PwD</option>
+                        <option value="No">No</option>
+                        <option value="Yes">Yes</option>
                     </select>
                 </div>
             </div>
         </div>
 
-        {/* PERSONAL DETAILS */}
+        {/* PERSONAL */}
         <div className="col-12 mt-4">
           <div className="d-flex align-items-center gap-2 mb-3 text-primary fw-bold border-start border-4 border-primary ps-3 bg-primary-subtle py-2 rounded-end">
             <UserIcon size={18} /> Personal Profile
           </div>
         </div>
-
         <div className="col-md-4">
           <label className="form-label small fw-bold text-muted">First Name *</label>
           <input value={formData.Employee_Name || ''} onChange={e => setFormData({...formData, Employee_Name: e.target.value})} className={`form-control fw-bold ${errors.Employee_Name ? 'is-invalid' : ''}`} />
         </div>
-        
         <div className="col-md-4">
-          <label className="form-label small fw-bold text-muted">Last Name / Surname *</label>
+          <label className="form-label small fw-bold text-muted">Surname *</label>
           <input value={formData.Employee_Surname || ''} onChange={e => setFormData({...formData, Employee_Surname: e.target.value})} className={`form-control fw-bold ${errors.Employee_Surname ? 'is-invalid' : ''}`} />
         </div>
-
         <div className="col-md-4">
           <label className="form-label small fw-bold text-muted">Gender *</label>
           <select value={formData.Gender || 'Male'} onChange={e => setFormData({...formData, Gender: e.target.value})} className="form-select">
@@ -477,21 +438,19 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
           </select>
         </div>
 
-        {/* SERVICE PLACEMENT */}
+        {/* ORGANIZATIONAL */}
         <div className="col-12 mt-5">
           <div className="d-flex align-items-center gap-2 mb-3 text-primary fw-bold border-start border-4 border-primary ps-3 bg-primary-subtle py-2 rounded-end">
-            <Briefcase size={18} /> Service & Organizational Placement
+            <Briefcase size={18} /> Organizational Placement
           </div>
         </div>
-
         <div className="col-md-4">
           <label className="form-label small fw-bold text-muted">Department *</label>
           <select value={formData.Department_ID ?? ''} onChange={e => setFormData({...formData, Department_ID: Number(e.target.value)})} className={`form-select ${errors.Department_ID ? 'is-invalid' : ''}`}>
-            <option value="">Select Dept...</option>
+            <option value="">Select Department...</option>
             {data.departments.map(d => <option key={d.Department_ID} value={d.Department_ID}>{d.Department_Name}</option>)}
           </select>
         </div>
-
         <div className="col-md-4">
           <label className="form-label small fw-bold text-muted">Office *</label>
           <select value={formData.Office_ID ?? ''} onChange={e => setFormData({...formData, Office_ID: Number(e.target.value)})} className={`form-select ${errors.Office_ID ? 'is-invalid' : ''}`}>
@@ -499,14 +458,12 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
             {availableOffices.map(o => <option key={o.Office_ID} value={o.Office_ID}>{o.Office_Name}</option>)}
           </select>
         </div>
-
         <div className="col-md-4">
           <label className="form-label small fw-bold text-muted">Service Type *</label>
-          <select value={formData.Service_Type || ''} onChange={e => setFormData({...formData, Service_Type: e.target.value as ServiceType})} className={`form-select fw-bold ${errors.Service_Type ? 'is-invalid' : ''}`}>
+          <select value={formData.Service_Type || ''} onChange={e => setFormData({...formData, Service_Type: e.target.value as ServiceType})} className="form-select fw-bold">
             {Object.values(ServiceType).map(st => <option key={st} value={st}>{st}</option>)}
           </select>
         </div>
-
         <div className="col-md-6">
           <label className="form-label small fw-bold text-muted">Designation *</label>
           <select value={formData.Post_ID ?? ''} onChange={e => setFormData({...formData, Post_ID: Number(e.target.value)})} className={`form-select fw-bold ${errors.Post_ID ? 'is-invalid' : ''}`}>
@@ -514,7 +471,6 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
             {availablePosts.map(p => <option key={p.Post_ID} value={p.Post_ID}>{p.Post_Name}</option>)}
           </select>
         </div>
-
         <div className="col-md-6">
           <label className="form-label small fw-bold text-muted">Payscale Level *</label>
           <select value={formData.Pay_ID ?? ''} onChange={e => setFormData({...formData, Pay_ID: Number(e.target.value)})} className={`form-select fw-bold ${errors.Pay_ID ? 'is-invalid' : ''}`}>
@@ -523,53 +479,46 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
           </select>
         </div>
 
-        {/* FINANCE */}
+        {/* BANKING */}
         <div className="col-12 mt-5">
           <div className="d-flex align-items-center gap-2 mb-3 text-primary fw-bold border-start border-4 border-primary ps-3 bg-primary-subtle py-2 rounded-end">
-            <Landmark size={18} /> Financial Disbursements
+            <Landmark size={18} /> Banking & Financial
           </div>
         </div>
-
         <div className="col-12 mb-2">
             <div className="p-4 bg-white border border-2 border-primary-subtle rounded-4 shadow-sm">
                 <div className="row g-4 align-items-end">
                     <div className="col-md-6">
-                        <label className="form-label small fw-bold text-primary text-uppercase tracking-wider">IFSC Code Verification *</label>
+                        <label className="form-label small fw-bold text-primary text-uppercase tracking-wider">IFSC Validation *</label>
                         <div className="input-group input-group-lg shadow-sm">
                             <span className="input-group-text bg-primary text-white border-primary"><Hash size={24} /></span>
-                            <input 
-                                value={formData.IFSC_Code || ''} 
-                                onChange={e => setFormData({...formData, IFSC_Code: e.target.value.toUpperCase()})} 
-                                className="form-control fw-bold text-primary border-primary" 
-                                placeholder="IFSC CODE"
-                                style={{ letterSpacing: '1px' }}
-                            />
+                            <input value={formData.IFSC_Code || ''} onChange={e => setFormData({...formData, IFSC_Code: e.target.value.toUpperCase()})} className="form-control fw-bold text-primary border-primary" placeholder="IFSC" style={{ letterSpacing: '1px' }} />
                             <button type="button" onClick={handleIfscVerify} className="btn btn-primary px-4 d-flex align-items-center gap-2" disabled={isVerifyingIfsc}>
                                 {isVerifyingIfsc ? <Loader2 size={24} className="animate-spin" /> : <Search size={24} />}
-                                <span className="d-none d-md-inline fw-bold">Validate</span>
+                                <span className="d-none d-md-inline fw-bold">Verify</span>
                             </button>
                         </div>
                     </div>
                     <div className="col-md-6">
-                        <label className="form-label small fw-bold text-muted">Bank Account Number *</label>
+                        <label className="form-label small fw-bold text-muted">Account Number *</label>
                         <div className="input-group input-group-lg shadow-sm">
-                            <span className="input-group-text bg-light"><CreditCard size={24}/></span>
-                            <input value={formData.ACC_No || ''} onChange={e => setFormData({...formData, ACC_No: e.target.value})} className={`form-control fw-bold border-start-0 ${errors.ACC_No ? 'is-invalid' : ''}`} placeholder="A/C NO" />
+                            <span className="input-group-text bg-light border-end-0"><CreditCard size={24}/></span>
+                            <input value={formData.ACC_No || ''} onChange={e => setFormData({...formData, ACC_No: e.target.value})} className={`form-control fw-bold border-start-0 ps-1 ${errors.ACC_No ? 'is-invalid' : ''}`} placeholder="A/C NO" />
                         </div>
                     </div>
                 </div>
                 <div className="row g-3 mt-4 pt-3 border-top">
                     <div className="col-md-6">
-                        <label className="form-label tiny fw-bold text-muted uppercase">Selected Institution</label>
+                        <label className="form-label tiny fw-bold text-muted uppercase">Institution</label>
                         <select value={formData.Bank_ID ?? ''} onChange={e => setFormData({...formData, Bank_ID: Number(e.target.value)})} className={`form-select bg-light border-0 fw-bold ${errors.Bank_ID ? 'is-invalid' : ''}`}>
-                            <option value="">-- Choice --</option>
+                            <option value="">-- Bank --</option>
                             {data.banks.map(b => <option key={b.Bank_ID} value={b.Bank_ID}>{b.Bank_Name}</option>)}
                         </select>
                     </div>
                     <div className="col-md-6">
-                        <label className="form-label tiny fw-bold text-muted uppercase">Selected Branch</label>
+                        <label className="form-label tiny fw-bold text-muted uppercase">Branch Location</label>
                         <select value={formData.Branch_ID ?? ''} onChange={e => setFormData({...formData, Branch_ID: Number(e.target.value)})} className={`form-select bg-light border-0 fw-bold ${errors.Branch_ID ? 'is-invalid' : ''}`}>
-                            <option value="">-- Choice --</option>
+                            <option value="">-- Branch --</option>
                             {availableBranches.map(b => <option key={b.Branch_ID} value={b.Branch_ID}>{b.Branch_Name}</option>)}
                         </select>
                     </div>
@@ -577,48 +526,46 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
             </div>
         </div>
 
-        {/* LIFECYCLE */}
+        {/* STATUS */}
         <div className="col-12 mt-5">
           <div className="d-flex align-items-center gap-2 mb-3 text-primary fw-bold border-start border-4 border-primary ps-3 bg-primary-subtle py-2 rounded-end">
-            <Power size={18} /> Deployment Lifecycle
+            <Power size={18} /> Account Status
           </div>
         </div>
-
         <div className="col-md-4">
-          <label className="form-label small fw-bold text-muted">Account Status *</label>
+          <label className="form-label small fw-bold text-muted">Active Record *</label>
           <select value={formData.Active || 'Yes'} onChange={e => setFormData({...formData, Active: e.target.value as 'Yes' | 'No'})} className="form-select fw-bold">
-            <option value="Yes">RECORD ACTIVE</option>
-            <option value="No">RECORD INACTIVE</option>
+            <option value="Yes">YES (ACTIVE)</option>
+            <option value="No">NO (INACTIVE)</option>
           </select>
         </div>
-
         {formData.Active === 'No' && (
           <>
             <div className="col-md-4">
-              <label className="form-label small fw-bold text-muted">Reason for Inactivity *</label>
+              <label className="form-label small fw-bold text-muted">Deactivation Reason *</label>
               <select value={formData.DA_Reason || ''} onChange={e => setFormData({...formData, DA_Reason: e.target.value})} className={`form-select ${errors.DA_Reason ? 'is-invalid' : ''}`}>
                 <option value="">Choose Reason...</option>
                 {DEACTIVATION_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
               </select>
             </div>
             <div className="col-md-4">
-              <label className="form-label small fw-bold text-muted">Document Proof (DA_Doc) *</label>
+              <label className="form-label small fw-bold text-muted">Verification Proof (DA_Doc) *</label>
               <div className="input-group shadow-sm">
                 <input type="file" ref={docInputRef} className={`form-control ${errors.Doc ? 'is-invalid' : ''}`} onChange={(e) => handleFileChange(e, 'doc')} accept=".pdf,image/*" />
-                {formData.DA_Doc && <a href={formData.DA_Doc} target="_blank" rel="noopener noreferrer" className="btn btn-outline-info"><ExternalLink size={16}/></a>}
+                {formData.DA_Doc && (
+                    <a href={formData.DA_Doc} target="_blank" rel="noopener noreferrer" className="btn btn-outline-info">
+                        <ExternalLink size={16}/>
+                    </a>
+                )}
               </div>
             </div>
           </>
         )}
 
         <div className="col-12 text-end mt-5 pt-4 border-top">
-          <button type="button" onClick={onCancel} className="btn btn-light px-4 me-3 rounded-pill fw-bold border">Dismiss Changes</button>
+          <button type="button" onClick={onCancel} className="btn btn-light px-4 me-3 rounded-pill fw-bold border">Cancel</button>
           <button type="submit" className="btn btn-primary px-5 shadow-lg rounded-pill d-inline-flex align-items-center gap-2 fw-bold" disabled={isUploading}>
-            {isUploading ? (
-              <><Loader2 size={18} className="animate-spin" /> Synchronizing...</>
-            ) : (
-              <><Save size={18} /> Commit Changes</>
-            )}
+            {isUploading ? <><Loader2 size={18} className="animate-spin" /> Synchronizing...</> : <><Save size={18} /> Update Record</>}
           </button>
         </div>
       </form>
@@ -631,8 +578,6 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
         @keyframes fadeInScale { from { opacity: 0; transform: scale(0.98) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
         .shadow-2xl { box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); }
         .shadow-inner { box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.06); }
-        .grab { cursor: grab; }
-        .grabbing { cursor: grabbing; }
       `}</style>
     </div>
   );
