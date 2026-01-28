@@ -129,7 +129,7 @@ function getSelectionData(ss) {
   
   const map = {};
   vals.forEach(r => {
-    // Normalize User_ID (remove .0 decimals if any)
+    // Normalize User_ID: Remove potential decimals like 1.0 -> 1
     const rawUid = r[0].toString().trim();
     const uId = rawUid.includes('.') ? Math.floor(parseFloat(rawUid)).toString() : rawUid;
     
@@ -143,21 +143,21 @@ function getSelectionData(ss) {
         const arr = JSON.parse(pVal);
         if (Array.isArray(arr)) {
           arr.forEach(id => {
-            const nid = parseInt(id);
+            const nid = parseInt(id.toString().replace(/\.0$/, ''));
             if (!isNaN(nid)) map[uId].push(nid);
           });
-          return;
+          return; // Continue to next row in forEach
         }
-      } catch(e) { /* fallback to standard */ }
+      } catch(e) { /* ignore parse error and try standard parse below */ }
     }
 
-    const pId = parseInt(pVal);
+    const pId = parseInt(pVal.replace(/\.0$/, ''));
     if (!isNaN(pId)) {
       map[uId].push(pId);
     }
   });
   
-  // Clean duplicates
+  // Ensure unique IDs in each list
   Object.keys(map).forEach(key => {
     map[key] = [...new Set(map[key])];
   });
@@ -177,7 +177,7 @@ function updateSelections(ss, payload) {
   const postIds = payload.Post_IDs;
   
   const vals = sheet.getDataRange().getValues();
-  // Delete existing individual rows for this user
+  // Clean existing mappings
   for (let i = vals.length - 1; i >= 1; i--) {
     const rowUid = vals[i][0].toString().trim();
     const cleanRowUid = rowUid.includes('.') ? Math.floor(parseFloat(rowUid)).toString() : rowUid;
@@ -186,10 +186,13 @@ function updateSelections(ss, payload) {
     }
   }
   
-  // Append as separate rows for standard compatibility
+  // Re-insert mappings as individual rows for maximum compatibility
   if (Array.isArray(postIds)) {
     postIds.forEach(pId => {
-      sheet.appendRow([parseInt(userId), parseInt(pId)]);
+      const cleanPid = Math.floor(Number(pId));
+      if (!isNaN(cleanPid)) {
+        sheet.appendRow([parseInt(userId), cleanPid]);
+      }
     });
   }
 }

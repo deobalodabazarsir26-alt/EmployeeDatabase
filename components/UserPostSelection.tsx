@@ -13,31 +13,36 @@ const UserPostSelection: React.FC<UserPostSelectionProps> = ({ data, currentUser
   const [searchTerm, setSearchTerm] = useState('');
   const isAdmin = currentUser.User_Type === UserType.ADMIN;
   
-  // Use Math.floor to strictly normalize the ID to integer
+  // Strictly normalize User_ID
   const currentUserId = Math.floor(Number(currentUser.User_ID));
 
-  // Robustly extract selections for the current user using multiple lookup fallbacks
+  // Extract selections with high resilience to key type mismatch
   const selectedPostIds = useMemo(() => {
     const selections = data.userPostSelections || {};
     
-    // Attempt lookup using numeric key, then numeric string, then potential decimal string
-    const userSelections = 
-      selections[currentUserId] || 
-      selections[currentUserId.toString()] || 
-      selections[`${currentUserId}.0`];
+    // Direct numeric access
+    let ids = selections[currentUserId];
     
-    if (Array.isArray(userSelections)) {
-      return userSelections.map(id => Math.floor(Number(id)));
+    // Fallback: If numeric access fails, iterate keys to find a match (handles stringified keys "1")
+    if (!Array.isArray(ids)) {
+      const matchingKey = Object.keys(selections).find(k => Math.floor(Number(k)) === currentUserId);
+      if (matchingKey) {
+        ids = (selections as any)[matchingKey];
+      }
+    }
+    
+    if (Array.isArray(ids)) {
+      return ids.map(id => Math.floor(Number(id)));
     }
     return [];
   }, [data.userPostSelections, currentUserId]);
 
-  // Helper to check if a post is in use by any employee
+  // Helper to check usage
   const getUsageCount = (postId: number) => {
     return (data.employees || []).filter(emp => Math.floor(Number(emp.Post_ID)) === Math.floor(Number(postId))).length;
   };
 
-  // Derive the two lists: Selected and Available
+  // Derive selection lists
   const selectedPosts = useMemo(() => 
     (data.posts || []).filter(p => selectedPostIds.includes(Math.floor(Number(p.Post_ID)))),
     [data.posts, selectedPostIds]
@@ -45,7 +50,8 @@ const UserPostSelection: React.FC<UserPostSelectionProps> = ({ data, currentUser
 
   const availablePosts = useMemo(() => 
     (data.posts || []).filter(p => {
-      const isAlreadySelected = selectedPostIds.includes(Math.floor(Number(p.Post_ID)));
+      const pId = Math.floor(Number(p.Post_ID));
+      const isAlreadySelected = selectedPostIds.includes(pId);
       const matchesSearch = searchTerm === '' || p.Post_Name.toLowerCase().includes(searchTerm.toLowerCase());
       return !isAlreadySelected && matchesSearch;
     }),
@@ -259,7 +265,7 @@ const UserPostSelection: React.FC<UserPostSelectionProps> = ({ data, currentUser
         </div>
         <div className="card-footer bg-light-subtle py-3 border-top text-center">
           <div className="small text-muted d-flex align-items-center justify-content-center gap-2">
-            <Info size={16} className="text-primary" />
+            <span className="text-primary"><Info size={16} /></span>
             Mapped designations define the selection choices in the Employee Registration form.
           </div>
         </div>
