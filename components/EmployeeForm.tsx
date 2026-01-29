@@ -1,9 +1,8 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Employee, AppData, ServiceType, User, UserType, Bank, BankBranch } from '../types';
-import { Save, X, Info, User as UserIcon, Briefcase, Landmark, AlertCircle, Hash, Activity, Search, Loader2, Power, FileText, Upload, ExternalLink, Camera, Scissors, Smartphone, CreditCard, Crop, Check, ZoomIn, ZoomOut, Move } from 'lucide-react';
+import { Employee, AppData, ServiceType, User, Bank, BankBranch } from '../types';
+import { Save, User as UserIcon, Briefcase, Landmark, Hash, Search, Loader2, Power, ExternalLink, Camera, Scissors, Smartphone, CreditCard, ZoomIn, ZoomOut, Upload } from 'lucide-react';
 import { ifscService } from '../services/ifscService';
-import { generateUniqueId } from '../App';
 
 interface EmployeeFormProps {
   employee: Employee | null;
@@ -18,8 +17,9 @@ interface EmployeeFormProps {
 const DEACTIVATION_REASONS = ['Transfer', 'Death', 'Resign', 'Debarred'];
 const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024; // 2MB
 
-const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser, onSave, onSaveBank, onSaveBranch, onCancel }) => {
+const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, onSave, onSaveBank, onSaveBranch, onCancel }) => {
   const [formData, setFormData] = useState<Partial<Employee>>(employee || {
+    Employee_ID: 0, // Placeholder for server-side sequential ID
     Gender: 'Male',
     PwD: 'No',
     Service_Type: ServiceType.REGULAR,
@@ -50,12 +50,6 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
   const displayCanvasRef = useRef<HTMLCanvasElement>(null);
 
   const [availableOffices, setAvailableOffices] = useState(data.offices || []);
-  const [availableBranches, setAvailableBranches] = useState(() => {
-    if (formData.Bank_ID && data.branches) {
-      return data.branches.filter(b => Math.floor(Number(b.Bank_ID)) === Math.floor(Number(formData.Bank_ID)));
-    }
-    return [];
-  });
 
   useEffect(() => {
     if (formData.Department_ID !== undefined && data.offices) {
@@ -64,14 +58,6 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
       setAvailableOffices([]);
     }
   }, [formData.Department_ID, data.offices]);
-
-  useEffect(() => {
-    if (formData.Bank_ID !== undefined && data.branches) {
-      setAvailableBranches(data.branches.filter(b => Math.floor(Number(b.Bank_ID)) === Math.floor(Number(formData.Bank_ID))));
-    } else {
-      setAvailableBranches([]);
-    }
-  }, [formData.Bank_ID, data.branches]);
 
   const drawCropper = useCallback(() => {
     if (!sourceImage || !displayCanvasRef.current) return;
@@ -169,11 +155,9 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
-    if (!formData.Employee_ID) newErrors.Employee_ID = "Required";
     if (!formData.Employee_Name?.trim()) newErrors.Employee_Name = "Required";
     if (!formData.Employee_Surname?.trim()) newErrors.Employee_Surname = "Required";
     if (!formData.DOB) newErrors.DOB = "Required";
-    if (!formData.Gender) newErrors.Gender = "Required";
     if (!formData.Mobile || !/^[0-9]{10}$/.test(formData.Mobile)) newErrors.Mobile = "10 digit mobile required";
     if (!formData.EPIC?.trim()) newErrors.EPIC = "Required";
     if (!formData.Department_ID) newErrors.Department_ID = "Required";
@@ -201,12 +185,10 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
     setIsVerifyingIfsc(false);
     if (details) {
       let bank = data.banks.find(b => b.Bank_Name.toLowerCase().trim() === details.BANK.toLowerCase().trim());
-      let targetBankId = bank ? Math.floor(Number(bank.Bank_ID)) : generateUniqueId();
-      if (!bank) onSaveBank({ Bank_ID: targetBankId, Bank_Name: details.BANK });
-
+      let targetBankId = bank ? Math.floor(Number(bank.Bank_ID)) : 0; 
+      
       let branch = data.branches.find(b => b.IFSC_Code === details.IFSC);
-      let targetBranchId = branch ? Math.floor(Number(branch.Branch_ID)) : generateUniqueId();
-      if (!branch) onSaveBranch({ Branch_ID: targetBranchId, Branch_Name: details.BRANCH, IFSC_Code: details.IFSC, Bank_ID: targetBankId });
+      let targetBranchId = branch ? Math.floor(Number(branch.Branch_ID)) : 0;
 
       setFormData(prev => ({ ...prev, Bank_ID: targetBankId, Branch_ID: targetBranchId, IFSC_Code: details.IFSC }));
       alert(`Verified: ${details.BANK}, ${details.BRANCH}`);
@@ -237,7 +219,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
         if (croppedPhotoBase64) {
           payload.photoData = {
             base64: croppedPhotoBase64,
-            name: `photo_${formData.Employee_ID}_${Date.now()}.jpg`,
+            name: `photo_${Date.now()}.jpg`,
             mimeType: 'image/jpeg'
           };
         }
@@ -245,14 +227,14 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
           const docBase64 = await toBase64(selectedDoc);
           payload.fileData = {
             base64: docBase64,
-            name: `doc_${formData.Employee_ID}_${selectedDoc.name.replace(/\s+/g, '_')}`,
+            name: `doc_${selectedDoc.name.replace(/\s+/g, '_')}`,
             mimeType: selectedDoc.type
           };
         }
         onSave(payload as Employee);
       } catch (err) {
         console.error("Submission failed:", err);
-        alert('Could not process files for upload. Ensure they are under 2MB.');
+        alert('Could not process files. Ensure they are under 2MB.');
         setIsUploading(false);
       }
     }
@@ -291,7 +273,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
         <div className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style={{ zIndex: 3000, backgroundColor: 'rgba(15, 23, 42, 0.96)', backdropFilter: 'blur(10px)' }}>
           <div className="bg-white p-4 rounded-4 shadow-2xl text-center" style={{ maxWidth: '440px', width: '90%' }}>
             <h6 className="fw-bold mb-3 d-flex align-items-center justify-content-center gap-2">
-              <Scissors size={20} className="text-primary" /> Profile Photo Alignment
+              <Scissors size={20} className="text-primary" /> Profile Alignment
             </h6>
             <div 
               className="position-relative mb-4 mx-auto border-0 rounded-3 overflow-hidden bg-dark shadow-inner" 
@@ -310,7 +292,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
             </div>
             <div className="d-flex gap-2">
               <button type="button" className="btn btn-light border w-100 rounded-pill fw-bold" onClick={() => setShowCropper(false)}>Cancel</button>
-              <button type="button" className="btn btn-primary w-100 rounded-pill shadow-sm fw-bold" onClick={confirmCrop}>Align & Save</button>
+              <button type="button" className="btn btn-primary w-100 rounded-pill shadow-sm fw-bold" onClick={confirmCrop}>Confirm Alignment</button>
             </div>
           </div>
         </div>
@@ -319,7 +301,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
       <div className="d-flex justify-content-between align-items-center mb-5 pb-3 border-bottom">
         <div>
           <h2 className="fw-bold h4 mb-1">{employee ? 'Update Personnel Record' : 'Register New Personnel'}</h2>
-          <p className="text-muted small mb-0 text-uppercase tracking-wider fw-bold">Enterprise Cloud Sync Active</p>
+          <p className="text-muted small mb-0 text-uppercase tracking-wider fw-bold">Cloud-Safe Sequential IDs</p>
         </div>
         <button onClick={onCancel} className="btn btn-outline-secondary btn-sm rounded-pill px-4">Discard</button>
       </div>
@@ -343,9 +325,6 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
                 </div>
               )}
             </div>
-            {formData.Photo?.includes('DRIVE_ERR') && (
-                <div className="text-danger tiny fw-bold mt-1">Upload Failed: Check Permissions</div>
-            )}
             <button type="button" className="btn btn-primary btn-sm rounded-circle position-absolute bottom-0 end-0 shadow-lg border-3 border-white" style={{ width: '48px', height: '48px', transform: 'translate(25%, 25%)' }} onClick={() => photoInputRef.current?.click()}>
               <Upload size={20} />
             </button>
@@ -359,8 +338,10 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
             </div>
             <div className="row g-3">
                 <div className="col-md-4">
-                    <label className="form-label small fw-bold text-muted">Employee ID *</label>
-                    <input name="Employee_ID" value={formData.Employee_ID ?? ''} onChange={e => setFormData({...formData, Employee_ID: Number(e.target.value)})} readOnly={!!employee} className={`form-control fw-bold ${errors.Employee_ID ? 'is-invalid' : ''}`} placeholder="ID No" />
+                    <label className="form-label small fw-bold text-muted">Employee ID</label>
+                    <div className="form-control fw-bold bg-light text-muted">
+                        {formData.Employee_ID && Number(formData.Employee_ID) !== 0 ? `EMP #${formData.Employee_ID}` : 'Auto-Assigned'}
+                    </div>
                 </div>
                 <div className="col-md-4">
                     <label className="form-label small fw-bold text-muted">Voter ID (EPIC) *</label>
@@ -486,7 +467,20 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
         </div>
         <div className="col-md-4">
           <label className="form-label small fw-bold text-muted">Active Record *</label>
-          <select value={formData.Active || 'Yes'} onChange={e => setFormData({...formData, Active: e.target.value as 'Yes' | 'No'})} className="form-select fw-bold">
+          <select 
+            value={formData.Active || 'Yes'} 
+            onChange={e => {
+              const val = e.target.value as 'Yes' | 'No';
+              const updates: Partial<Employee> = { Active: val };
+              // Clear deactivation reasons and docs if switching back to Active
+              if (val === 'Yes') {
+                updates.DA_Reason = '';
+                updates.DA_Doc = '';
+              }
+              setFormData({...formData, ...updates});
+            }} 
+            className="form-select fw-bold"
+          >
             <option value="Yes">YES (ACTIVE)</option>
             <option value="No">NO (INACTIVE)</option>
           </select>
@@ -510,9 +504,6 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
                     </a>
                 )}
               </div>
-              {formData.DA_Doc?.includes('DRIVE_ERR') && (
-                <div className="text-danger tiny fw-bold mt-1">Upload Failed: Check Permissions</div>
-              )}
             </div>
           </>
         )}
@@ -524,14 +515,6 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
           </button>
         </div>
       </form>
-      <style>{`
-        .animate-spin { animation: spin 1s linear infinite; }
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        .tiny { font-size: 0.65rem; }
-        .object-fit-cover { object-fit: cover; }
-        .animate-in { animation: fadeInScale 0.4s ease-out; }
-        @keyframes fadeInScale { from { opacity: 0; transform: scale(0.98) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
-      `}</style>
     </div>
   );
 };

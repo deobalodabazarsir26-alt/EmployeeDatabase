@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { AppData, User, UserType, Employee, Office, Bank, BankBranch, Department, Post, Payscale } from './types';
-import { INITIAL_DATA, GSHEET_API_URL } from './constants';
+import { INITIAL_DATA } from './constants';
 import { syncService } from './services/googleSheetService';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
@@ -14,9 +14,10 @@ import UserPostSelection from './components/UserPostSelection';
 import UserManagement from './components/UserManagement';
 import DepartmentManagement from './components/DepartmentManagement';
 import ServiceMasterManagement from './components/ServiceMasterManagement';
-import { LogOut, RefreshCw, CheckCircle, AlertCircle, Clock } from 'lucide-react';
+import { RefreshCw, CheckCircle, AlertCircle, Clock } from 'lucide-react';
 
-export const generateUniqueId = () => Number(`${Date.now()}${Math.floor(Math.random() * 1000)}`);
+// Using 0 as a placeholder to signal the Apps Script to generate a sequential ID
+export const generatePlaceholderId = () => 0;
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
@@ -63,10 +64,9 @@ export default function App() {
           const newItem = { ...item };
           Object.keys(newItem).forEach(key => {
             const k = key.toLowerCase();
-            if (k.endsWith('_id') || k === 'ac_no' || k === 'bank_id' || k === 'user_id' || k === 'post_id' || k === 'pay_id' || k === 'department_id' || k === 'office_id' || k === 'branch_id' || k === 'employee_id') {
-              if (newItem[key] !== undefined && newItem[key] !== null && newItem[key] !== '') {
-                newItem[key] = Math.floor(Number(newItem[key]));
-              }
+            const isId = k.endsWith('_id') || k === 'ac_no' || k === 'bank_id' || k === 'user_id' || k === 'post_id' || k === 'pay_id' || k === 'department_id' || k === 'office_id' || k === 'branch_id' || k === 'employee_id';
+            if (isId && newItem[key] !== undefined && newItem[key] !== null && newItem[key] !== '') {
+              newItem[key] = Math.floor(Number(newItem[key]));
             }
             if (isUserTable && (k === 'user_type' || key === 'User_Type')) {
               const val = newItem[key]?.toString().trim().toLowerCase();
@@ -83,8 +83,7 @@ export default function App() {
       sanitizedData.departments = sanitizeTable(remoteData.departments || []);
       sanitizedData.offices = sanitizeTable(remoteData.offices || []);
       sanitizedData.banks = sanitizeTable(remoteData.banks || []);
-      const rawBranches = remoteData.branches || (remoteData as any).bank_branchs || [];
-      sanitizedData.branches = sanitizeTable(rawBranches);
+      sanitizedData.branches = sanitizeTable(remoteData.branches || (remoteData as any).bank_branchs || []);
       sanitizedData.posts = sanitizeTable(remoteData.posts || []);
       sanitizedData.payscales = sanitizeTable(remoteData.payscales || []);
       sanitizedData.employees = sanitizeTable(remoteData.employees || []);
@@ -111,7 +110,7 @@ export default function App() {
       setLastSynced(new Date());
       try { localStorage.setItem('ems_data', JSON.stringify(mergedData)); } catch (e) {}
     } else {
-      setSyncError("Cloud connection timeout. Please verify your internet and script deployment.");
+      setSyncError("Cloud connection timeout. Please verify internet and script deployment.");
     }
     if (showIndicator) setIsLoading(false);
   }, []);
@@ -132,7 +131,7 @@ export default function App() {
     return employees.filter(e => userOfficeIds.includes(Math.floor(Number(e.Office_ID))));
   }, [currentUser, data.employees, data.offices]);
 
-  const performSync = async (action: string, payload: any, newState: AppData) => {
+  const performSync = async (action: string, payload: any, newState: AppData, listKey: keyof AppData, idKey: string) => {
     if (isSyncing) return;
     setIsSyncing(true);
     setSyncError(null);
@@ -143,187 +142,126 @@ export default function App() {
     if (!result.success) {
       setSyncError(`Sync error: ${result.error}`);
       await loadData(false);
-    } else {
-      if (result.data) {
-        const updatedObj = result.data;
-        let updatedData = { ...newState };
-        
-        if (action === 'upsertEmployee') {
-          updatedData.employees = newState.employees.map(e => 
-            Math.floor(Number(e.Employee_ID)) === Math.floor(Number(updatedObj.Employee_ID)) ? updatedObj : e
-          );
-        } else if (action === 'upsertUser') {
-          updatedData.users = newState.users.map(u => 
-            Math.floor(Number(u.User_ID)) === Math.floor(Number(updatedObj.User_ID)) ? updatedObj : u
-          );
-        }
-        
+    } else if (result.data) {
+      const serverObj = result.data;
+      const updatedData = { ...newState };
+      const list = updatedData[listKey];
+      
+      if (Array.isArray(list)) {
+        const updatedList = list.map((item: any) => {
+          if (item[idKey] === serverObj[idKey] || (Number(item[idKey]) === 0 && action.startsWith('upsert'))) {
+            return serverObj;
+          }
+          return item;
+        });
+        (updatedData as any)[listKey] = updatedList;
         setData(updatedData);
         try { localStorage.setItem('ems_data', JSON.stringify(updatedData)); } catch (e) {}
       }
       setLastSynced(new Date());
+      loadData(false);
     }
     setIsSyncing(false);
   };
 
   const upsertUser = (user: User) => {
-    const now = new Date().toLocaleString();
-    const users = data.users || [];
-    const exists = users.find(u => Math.floor(Number(u.User_ID)) === Math.floor(Number(user.User_ID)));
-    const finalUser = exists 
-      ? { ...user, T_STMP_ADD: exists.T_STMP_ADD, T_STMP_UPD: now }
-      : { ...user, User_ID: user.User_ID || generateUniqueId(), T_STMP_ADD: now, T_STMP_UPD: now };
-    const newUsers = exists 
-      ? users.map(u => Math.floor(Number(u.User_ID)) === Math.floor(Number(user.User_ID)) ? finalUser : u)
-      : [...users, finalUser];
-    performSync('upsertUser', finalUser, { ...data, users: newUsers });
+    const isNew = !user.User_ID || Number(user.User_ID) === 0;
+    const payload = { ...user, User_ID: isNew ? 0 : user.User_ID };
+    const newUsers = isNew ? [...data.users, payload] : data.users.map(u => u.User_ID === user.User_ID ? user : u);
+    performSync('upsertUser', payload, { ...data, users: newUsers as User[] }, 'users', 'User_ID');
   };
 
   const deleteUser = (userId: number) => {
     const id = Math.floor(Number(userId));
     if (data.offices.some(o => Math.floor(Number(o.User_ID)) === id)) return alert("User is active custodian for offices.");
     const newUsers = data.users.filter(u => Math.floor(Number(u.User_ID)) !== id);
-    performSync('deleteUser', { User_ID: id }, { ...data, users: newUsers });
+    performSync('deleteUser', { User_ID: id }, { ...data, users: newUsers }, 'users', 'User_ID');
   };
 
   const upsertDepartment = (dept: Department) => {
-    const now = new Date().toLocaleString();
-    const exists = data.departments.find(d => Math.floor(Number(d.Department_ID)) === Math.floor(Number(dept.Department_ID)));
-    const finalDept = exists
-      ? { ...dept, T_STMP_ADD: exists.T_STMP_ADD, T_STMP_UPD: now }
-      : { ...dept, Department_ID: dept.Department_ID || generateUniqueId(), T_STMP_ADD: now, T_STMP_UPD: now };
-    const newDepts = exists
-      ? data.departments.map(d => Math.floor(Number(d.Department_ID)) === Math.floor(Number(dept.Department_ID)) ? finalDept : d)
-      : [...data.departments, finalDept];
-    performSync('upsertDepartment', finalDept, { ...data, departments: newDepts });
+    const isNew = !dept.Department_ID || Number(dept.Department_ID) === 0;
+    const payload = { ...dept, Department_ID: isNew ? 0 : dept.Department_ID };
+    const newDepts = isNew ? [...data.departments, payload] : data.departments.map(d => d.Department_ID === dept.Department_ID ? dept : d);
+    performSync('upsertDepartment', payload, { ...data, departments: newDepts as Department[] }, 'departments', 'Department_ID');
   };
 
   const deleteDepartment = (deptId: number) => {
     const id = Math.floor(Number(deptId));
     const newDepts = data.departments.filter(d => Math.floor(Number(d.Department_ID)) !== id);
-    performSync('deleteDepartment', { Department_ID: id }, { ...data, departments: newDepts });
+    performSync('deleteDepartment', { Department_ID: id }, { ...data, departments: newDepts }, 'departments', 'Department_ID');
   };
 
   const upsertOffice = (office: Office) => {
-    const now = new Date().toLocaleString();
-    const exists = data.offices.find(o => Math.floor(Number(o.Office_ID)) === Math.floor(Number(office.Office_ID)));
-    const finalOffice = exists
-      ? { ...office, T_STMP_ADD: exists.T_STMP_ADD, T_STMP_UPD: now }
-      : { ...office, Office_ID: office.Office_ID || generateUniqueId(), T_STMP_ADD: now, T_STMP_UPD: now };
-    const newOffices = exists
-      ? data.offices.map(o => Math.floor(Number(o.Office_ID)) === Math.floor(Number(office.Office_ID)) ? finalOffice : o)
-      : [...data.offices, finalOffice];
-    performSync('upsertOffice', finalOffice, { ...data, offices: newOffices });
+    const isNew = !office.Office_ID || Number(office.Office_ID) === 0;
+    const payload = { ...office, Office_ID: isNew ? 0 : office.Office_ID };
+    const newOffices = isNew ? [...data.offices, payload] : data.offices.map(o => o.Office_ID === office.Office_ID ? office : o);
+    performSync('upsertOffice', payload, { ...data, offices: newOffices as Office[] }, 'offices', 'Office_ID');
   };
 
   const deleteOffice = (officeId: number) => {
     const id = Math.floor(Number(officeId));
     const newOffices = data.offices.filter(o => Math.floor(Number(o.Office_ID)) !== id);
-    performSync('deleteOffice', { Office_ID: id }, { ...data, offices: newOffices });
+    performSync('deleteOffice', { Office_ID: id }, { ...data, offices: newOffices }, 'offices', 'Office_ID');
   };
 
   const upsertBank = (bank: Bank) => {
-    const now = new Date().toLocaleString();
-    const exists = data.banks.find(b => Math.floor(Number(b.Bank_ID)) === Math.floor(Number(bank.Bank_ID)));
-    const finalBank = exists
-      ? { ...bank, T_STMP_ADD: exists.T_STMP_ADD, T_STMP_UPD: now }
-      : { ...bank, Bank_ID: bank.Bank_ID || generateUniqueId(), T_STMP_ADD: now, T_STMP_UPD: now };
-    const newBanks = exists
-      ? data.banks.map(b => Math.floor(Number(b.Bank_ID)) === Math.floor(Number(bank.Bank_ID)) ? finalBank : b)
-      : [...data.banks, finalBank];
-    performSync('upsertBank', finalBank, { ...data, banks: newBanks });
+    const isNew = !bank.Bank_ID || Number(bank.Bank_ID) === 0;
+    const payload = { ...bank, Bank_ID: isNew ? 0 : bank.Bank_ID };
+    const newBanks = isNew ? [...data.banks, payload] : data.banks.map(b => b.Bank_ID === bank.Bank_ID ? bank : b);
+    performSync('upsertBank', payload, { ...data, banks: newBanks as Bank[] }, 'banks', 'Bank_ID');
   };
 
   const deleteBank = (bankId: number) => {
     const id = Math.floor(Number(bankId));
-    if (data.branches.some(b => Math.floor(Number(b.Bank_ID)) === id) || data.employees.some(e => Math.floor(Number(e.Bank_ID)) === id)) {
-      return alert("Bank in use.");
-    }
     const newBanks = data.banks.filter(b => Math.floor(Number(b.Bank_ID)) !== id);
-    performSync('deleteBank', { Bank_ID: id }, { ...data, banks: newBanks });
+    performSync('deleteBank', { Bank_ID: id }, { ...data, banks: newBanks }, 'banks', 'Bank_ID');
   };
 
   const upsertBranch = (branch: BankBranch) => {
-    const now = new Date().toLocaleString();
-    const exists = data.branches.find(b => Math.floor(Number(b.Branch_ID)) === Math.floor(Number(branch.Branch_ID)));
-    const finalBranch = exists
-      ? { ...branch, T_STMP_ADD: exists.T_STMP_ADD, T_STMP_UPD: now }
-      : { ...branch, Branch_ID: branch.Branch_ID || generateUniqueId(), T_STMP_ADD: now, T_STMP_UPD: now };
-    const newBranches = exists
-      ? data.branches.map(b => Math.floor(Number(b.Branch_ID)) === Math.floor(Number(branch.Branch_ID)) ? finalBranch : b)
-      : [...data.branches, finalBranch];
-    performSync('upsertBranch', finalBranch, { ...data, branches: newBranches });
-  };
-
-  const batchUpsertBranches = (branches: BankBranch[]) => {
-    const now = new Date().toLocaleString();
-    const newBranches = [...data.branches];
-    branches.forEach(branch => {
-      const idx = newBranches.findIndex(b => Math.floor(Number(b.Branch_ID)) === Math.floor(Number(branch.Branch_ID)));
-      if (idx !== -1) newBranches[idx] = { ...branch, T_STMP_UPD: now };
-    });
-    performSync('batchUpsertBranches', branches, { ...data, branches: newBranches });
+    const isNew = !branch.Branch_ID || Number(branch.Branch_ID) === 0;
+    const payload = { ...branch, Branch_ID: isNew ? 0 : branch.Branch_ID };
+    const newBranches = isNew ? [...data.branches, payload] : data.branches.map(b => b.Branch_ID === branch.Branch_ID ? branch : b);
+    performSync('upsertBranch', payload, { ...data, branches: newBranches as BankBranch[] }, 'branches', 'Branch_ID');
   };
 
   const deleteBranch = (branchId: number) => {
     const id = Math.floor(Number(branchId));
-    if (data.employees.some(e => Math.floor(Number(e.Branch_ID)) === id)) return alert("Branch in use.");
     const newBranches = data.branches.filter(b => Math.floor(Number(b.Branch_ID)) !== id);
-    performSync('deleteBranch', { Branch_ID: id }, { ...data, branches: newBranches });
+    performSync('deleteBranch', { Branch_ID: id }, { ...data, branches: newBranches }, 'branches', 'Branch_ID');
   };
 
   const upsertPost = (post: Post) => {
-    const now = new Date().toLocaleString();
-    const exists = data.posts.find(p => Math.floor(Number(p.Post_ID)) === Math.floor(Number(post.Post_ID)));
-    const finalPost = exists
-      ? { ...post, T_STMP_ADD: exists.T_STMP_ADD, T_STMP_UPD: now }
-      : { ...post, Post_ID: post.Post_ID || generateUniqueId(), T_STMP_ADD: now, T_STMP_UPD: now };
-    const newPosts = exists
-      ? data.posts.map(p => Math.floor(Number(p.Post_ID)) === Math.floor(Number(post.Post_ID)) ? finalPost : p)
-      : [...data.posts, finalPost];
-    performSync('upsertPost', finalPost, { ...data, posts: newPosts });
+    const isNew = !post.Post_ID || Number(post.Post_ID) === 0;
+    const payload = { ...post, Post_ID: isNew ? 0 : post.Post_ID };
+    const newPosts = isNew ? [...data.posts, payload] : data.posts.map(p => p.Post_ID === post.Post_ID ? post : p);
+    performSync('upsertPost', payload, { ...data, posts: newPosts as Post[] }, 'posts', 'Post_ID');
   };
 
   const deletePost = (postId: number) => {
     const id = Math.floor(Number(postId));
     const newPosts = data.posts.filter(p => Math.floor(Number(p.Post_ID)) !== id);
-    performSync('deletePost', { Post_ID: id }, { ...data, posts: newPosts });
+    performSync('deletePost', { Post_ID: id }, { ...data, posts: newPosts }, 'posts', 'Post_ID');
   };
 
   const upsertPayscale = (pay: Payscale) => {
-    const now = new Date().toLocaleString();
-    const exists = data.payscales.find(p => Math.floor(Number(p.Pay_ID)) === Math.floor(Number(pay.Pay_ID)));
-    const finalPay = exists
-      ? { ...pay, T_STMP_ADD: exists.T_STMP_ADD, T_STMP_UPD: now }
-      : { ...pay, Pay_ID: pay.Pay_ID || generateUniqueId(), T_STMP_ADD: now, T_STMP_UPD: now };
-    const newPays = exists
-      ? data.payscales.map(p => Math.floor(Number(p.Pay_ID)) === Math.floor(Number(pay.Pay_ID)) ? finalPay : p)
-      : [...data.payscales, finalPay];
-    performSync('upsertPayscale', finalPay, { ...data, payscales: newPays });
+    const isNew = !pay.Pay_ID || Number(pay.Pay_ID) === 0;
+    const payload = { ...pay, Pay_ID: isNew ? 0 : pay.Pay_ID };
+    const newPays = isNew ? [...data.payscales, payload] : data.payscales.map(p => p.Pay_ID === pay.Pay_ID ? pay : p);
+    performSync('upsertPayscale', payload, { ...data, payscales: newPays as Payscale[] }, 'payscales', 'Pay_ID');
   };
 
   const deletePayscale = (payId: number) => {
     const id = Math.floor(Number(payId));
     const newPays = data.payscales.filter(p => Math.floor(Number(p.Pay_ID)) !== id);
-    performSync('deletePayscale', { Pay_ID: id }, { ...data, payscales: newPays });
+    performSync('deletePayscale', { Pay_ID: id }, { ...data, payscales: newPays }, 'payscales', 'Pay_ID');
   };
 
   const upsertEmployee = (employee: Employee) => {
-    const now = new Date().toLocaleString();
-    const exists = data.employees.find(e => Math.floor(Number(e.Employee_ID)) === Math.floor(Number(employee.Employee_ID)));
+    const isNew = !employee.Employee_ID || Number(employee.Employee_ID) === 0;
+    const payload = { ...employee, Employee_ID: isNew ? 0 : employee.Employee_ID };
+    const newEmployees = isNew ? [...data.employees, payload] : data.employees.map(e => e.Employee_ID === employee.Employee_ID ? employee : e);
     
-    // Maintain the files provided by the form
-    const finalEmployee = {
-      ...employee,
-      T_STMP_ADD: exists ? exists.T_STMP_ADD : now,
-      T_STMP_UPD: now
-    };
-    
-    const newEmployees = exists
-      ? data.employees.map(e => Math.floor(Number(e.Employee_ID)) === Math.floor(Number(employee.Employee_ID)) ? finalEmployee : e)
-      : [...data.employees, finalEmployee];
-    
-    performSync('upsertEmployee', finalEmployee, { ...data, employees: newEmployees });
+    performSync('upsertEmployee', payload, { ...data, employees: newEmployees as Employee[] }, 'employees', 'Employee_ID');
     setEditingEmployee(null);
     setActiveTab('employees');
   };
@@ -331,14 +269,22 @@ export default function App() {
   const deleteEmployee = (empId: number) => {
     const id = Math.floor(Number(empId));
     const newEmployees = data.employees.filter(e => Math.floor(Number(e.Employee_ID)) !== id);
-    performSync('deleteEmployee', { Employee_ID: id }, { ...data, employees: newEmployees });
+    performSync('deleteEmployee', { Employee_ID: id }, { ...data, employees: newEmployees }, 'employees', 'Employee_ID');
   };
 
   const toggleEmployeeStatus = (empId: number) => {
     const employee = data.employees.find(e => Math.floor(Number(e.Employee_ID)) === Math.floor(Number(empId)));
     if (!employee) return;
     const newStatus = employee.Active === 'Yes' ? 'No' : 'Yes';
-    upsertEmployee({ ...employee, Active: newStatus, DA_Reason: newStatus === 'No' ? 'Transfer' : '' });
+    const updatedEmployee = { ...employee, Active: newStatus };
+    
+    // Explicitly clear deactivation details when switching from Inactive to Active
+    if (newStatus === 'Yes') {
+      updatedEmployee.DA_Reason = '';
+      updatedEmployee.DA_Doc = '';
+    }
+    
+    upsertEmployee(updatedEmployee as Employee);
   };
 
   const togglePostSelection = (postId: number) => {
@@ -349,7 +295,15 @@ export default function App() {
       ? currentSelections.filter(id => id !== postId)
       : [...currentSelections, postId];
     const newMap = { ...data.userPostSelections, [userId]: newSelections };
-    performSync('updateUserPostSelections', { User_ID: userId, Post_IDs: newSelections }, { ...data, userPostSelections: newMap });
+    
+    setIsSyncing(true);
+    syncService.saveData('updateUserPostSelections', { User_ID: userId, Post_IDs: newSelections }).then(res => {
+      if (res.success) {
+        setData(prev => ({ ...prev, userPostSelections: newMap }));
+        setLastSynced(new Date());
+      }
+      setIsSyncing(false);
+    });
   };
 
   if (!currentUser) {
@@ -391,7 +345,7 @@ export default function App() {
       case 'users': return <UserManagement data={data} onSaveUser={upsertUser} onDeleteUser={deleteUser} />;
       case 'offices': return <OfficeManagement data={data} onSaveOffice={upsertOffice} onDeleteOffice={deleteOffice} />;
       case 'departments': return <DepartmentManagement data={data} onSaveDepartment={upsertDepartment} onDeleteDepartment={deleteDepartment} />;
-      case 'banks': return <BankManagement data={data} onSaveBank={upsertBank} onDeleteBank={deleteBank} onSaveBranch={upsertBranch} onDeleteBranch={deleteBranch} onBatchUpdateBranches={batchUpsertBranches} />;
+      case 'banks': return <BankManagement data={data} onSaveBank={upsertBank} onDeleteBank={deleteBank} onSaveBranch={upsertBranch} onDeleteBranch={deleteBranch} />;
       case 'serviceMaster': return <ServiceMasterManagement data={data} onSavePost={upsertPost} onDeletePost={deletePost} onSavePayscale={upsertPayscale} onDeletePayscale={deletePayscale} />;
       default: return <Dashboard employees={filteredEmployees} data={data} />;
     }
@@ -414,19 +368,19 @@ export default function App() {
           </div>
           <div className="d-flex align-items-center gap-3">
             <div className="text-end d-none d-md-block">
-              <div className="small text-muted d-flex align-items-center gap-1"><Clock size={12} /> Sync: {lastSynced.toLocaleTimeString()}</div>
+              <div className="small text-muted d-flex align-items-center gap-1"><Clock size={12} /> Last: {lastSynced.toLocaleTimeString()}</div>
             </div>
             <button onClick={() => loadData()} disabled={isSyncing} className="btn btn-light btn-sm rounded-pill border shadow-sm px-3 d-flex align-items-center gap-2">
-              <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} /> {isSyncing ? 'Processing' : 'Refresh'}
+              <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} /> {isSyncing ? 'Syncing' : 'Refresh'}
             </button>
           </div>
         </header>
         <main className="p-4">
-          {syncError && <div className="alert alert-warning border-0 shadow-sm d-flex align-items-center gap-2 mb-4"><AlertCircle size={18} /><div><div className="fw-bold">Synchronization Status</div><div className="small">{syncError}</div></div></div>}
+          {syncError && <div className="alert alert-warning border-0 shadow-sm d-flex align-items-center gap-2 mb-4"><AlertCircle size={18} /><div><div className="fw-bold">Sync Warning</div><div className="small">{syncError}</div></div></div>}
           {isLoading && !isSyncing ? (
             <div className="d-flex flex-column align-items-center justify-content-center py-5 mt-5">
               <div className="spinner-border text-primary mb-3" role="status"></div>
-              <p className="text-muted fw-medium">Preparing workspace...</p>
+              <p className="text-muted fw-medium">Loading Workspace...</p>
             </div>
           ) : renderContent()}
         </main>
