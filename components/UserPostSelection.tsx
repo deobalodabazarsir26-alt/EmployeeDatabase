@@ -13,33 +13,29 @@ const UserPostSelection: React.FC<UserPostSelectionProps> = ({ data, currentUser
   const [searchTerm, setSearchTerm] = useState('');
   const isAdmin = currentUser.User_Type === UserType.ADMIN;
   
-  // Strictly normalize User_ID
-  const currentUserId = Math.floor(Number(currentUser.User_ID));
+  // Safe numeric conversion for user ID
+  const currentUserIdNum = Math.floor(Number(currentUser.User_ID));
 
-  // Extract selections with high resilience to key type mismatch
+  // Extract selections: Handles the case where keys might be strings or numbers in the Record
   const selectedPostIds = useMemo(() => {
     const selections = data.userPostSelections || {};
     
-    // Direct numeric access
-    let ids = selections[currentUserId];
-    
-    // Fallback: If numeric access fails, iterate keys to find a match (handles stringified keys "1")
+    // Check for matching user ID (try number, then string fallback)
+    let ids = selections[currentUserIdNum];
     if (!Array.isArray(ids)) {
-      const matchingKey = Object.keys(selections).find(k => Math.floor(Number(k)) === currentUserId);
-      if (matchingKey) {
-        ids = (selections as any)[matchingKey];
-      }
+      ids = (selections as any)[currentUserIdNum.toString()];
     }
-    
+
     if (Array.isArray(ids)) {
       return ids.map(id => Math.floor(Number(id)));
     }
     return [];
-  }, [data.userPostSelections, currentUserId]);
+  }, [data.userPostSelections, currentUserIdNum]);
 
   // Helper to check usage
   const getUsageCount = (postId: number) => {
-    return (data.employees || []).filter(emp => Math.floor(Number(emp.Post_ID)) === Math.floor(Number(postId))).length;
+    const pId = Math.floor(Number(postId));
+    return (data.employees || []).filter(emp => Math.floor(Number(emp.Post_ID)) === pId).length;
   };
 
   // Derive selection lists
@@ -145,7 +141,8 @@ const UserPostSelection: React.FC<UserPostSelectionProps> = ({ data, currentUser
           {selectedPosts.length > 0 ? (
             <div className="row g-3">
               {selectedPosts.map(post => {
-                const usageCount = getUsageCount(Math.floor(Number(post.Post_ID)));
+                const pId = Math.floor(Number(post.Post_ID));
+                const usageCount = getUsageCount(pId);
                 const isLocked = usageCount > 0;
                 
                 return (
@@ -165,6 +162,7 @@ const UserPostSelection: React.FC<UserPostSelectionProps> = ({ data, currentUser
                           onClick={() => handleRemove(post)}
                           className={`btn btn-sm rounded-circle p-2 border-0 ms-2 transition-all ${isLocked ? 'btn-light text-muted opacity-50 cursor-not-allowed' : 'btn-danger-subtle text-danger shadow-sm'}`}
                           title={isLocked ? `Locked: Assigned to ${usageCount} employees` : "Remove Mapping"}
+                          disabled={isLocked}
                         >
                           {isLocked ? <Lock size={14} /> : <Trash2 size={16} />}
                         </button>

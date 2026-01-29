@@ -1,6 +1,7 @@
+
 # Employee Management System (EMS)
 
-## 🛠️ Master Google Apps Script (v3.2) - Robust Sequential IDs & Reliable Drive Cleanup
+## 🛠️ Master Google Apps Script (v3.3) - Robust Sequential IDs & Reliable Drive Cleanup
 
 ### 1. The Manifest (`appsscript.json`)
 Ensure this is enabled in **Project Settings**.
@@ -36,7 +37,7 @@ Replace your script with this version. It fixes the Drive deletion bug by using 
 ```javascript
 /**
  * MASTER CRUD SCRIPT FOR EMS PRO
- * Version: 3.2 (Robust Cleanup & ID Sequence)
+ * Version: 3.3 (Robust Cleanup & ID Sequence)
  */
 
 const FOLDER_ID_PHOTOS = "1nohdez9u46-OmM6im7hD7OjGJhuHfKZm";
@@ -77,6 +78,9 @@ function doPost(e) {
       const sheetName = (entity === 'Branch' || entity === 'bank_branchs') ? 'Bank_Branch' : entity;
       deleteRow(ss, sheetName, payload);
     }
+    else if (action === 'updateUserPostSelections') {
+      updateUserPostSelections(ss, payload);
+    }
 
     return ContentService.createTextOutput(JSON.stringify({ status: 'success', data: payload }))
       .setMimeType(ContentService.MimeType.JSON);
@@ -112,16 +116,11 @@ function upsertRow(ss, sheetName, data) {
     const oldRow = rows[rowIndex - 1];
     headers.forEach((h, i) => {
       const headerName = h.toString().trim().toLowerCase();
-      // Handle DA_Doc and Photo cleanup
       if (headerName === 'da_doc' || headerName === 'photo') {
         const oldUrl = oldRow[i];
-        // Find corresponding key in incoming data (case-insensitive)
         const dataKey = Object.keys(data).find(k => k.toLowerCase() === headerName);
         const newUrl = dataKey ? data[dataKey] : undefined;
-        
-        // If there was an old Drive file, and the new value is blank, different, or a new file is being uploaded
         const isBeingReplacedByUpload = (headerName === 'photo' && data.photoData) || (headerName === 'da_doc' && data.fileData);
-        
         if (oldUrl && oldUrl.indexOf('drive.google.com') !== -1) {
           if (newUrl === "" || newUrl === null || (newUrl !== undefined && newUrl !== oldUrl) || isBeingReplacedByUpload) {
              deleteFileByUrl(oldUrl);
@@ -131,7 +130,6 @@ function upsertRow(ss, sheetName, data) {
     });
   }
 
-  // Handle New Drive Uploads
   if (data.photoData && data.photoData.base64) {
     data.Photo = uploadFileToDrive(data.photoData, FOLDER_ID_PHOTOS);
     delete data.photoData;
@@ -163,14 +161,10 @@ function deleteFileByUrl(url) {
     } else if (url.indexOf("/d/") !== -1) {
       fileId = url.split("/d/")[1].split("/")[0];
     }
-    
     if (fileId && fileId.length > 5) {
       DriveApp.getFileById(fileId).setTrashed(true);
-      console.log("Cleanup Success: Trashed file ID " + fileId);
     }
-  } catch (e) {
-    console.error("Cleanup Failure: " + e.message + " for URL: " + url);
-  }
+  } catch (e) {}
 }
 
 function getNextId(sheet) {
@@ -240,8 +234,43 @@ function getSelectionData(ss) {
   vals.forEach(r => {
     const uId = r[0].toString();
     if (!map[uId]) map[uId] = [];
-    map[uId].push(Number(r[1]));
+    
+    // Support either single values or array-like strings in cell
+    let val = r[1];
+    if (typeof val === 'string' && val.indexOf('[') !== -1) {
+      try {
+        const parsed = JSON.parse(val);
+        if (Array.isArray(parsed)) {
+          parsed.forEach(v => map[uId].push(Number(v)));
+        }
+      } catch(e) {
+        // Fallback for manual list [1, 2]
+        val.replace(/[\[\]]/g, '').split(',').forEach(v => map[uId].push(Number(v.trim())));
+      }
+    } else {
+      map[uId].push(Number(val));
+    }
   });
   return map;
+}
+
+function updateUserPostSelections(ss, payload) {
+  const sheet = ss.getSheetByName('UserPostSelections');
+  if (!sheet) return;
+  const userId = payload.User_ID.toString();
+  const postIds = payload.Post_IDs; // Array of numbers
+
+  const rows = sheet.getDataRange().getValues();
+  // Delete existing rows for this user
+  for (let i = rows.length - 1; i >= 1; i--) {
+    if (rows[i][0].toString() === userId) {
+      sheet.deleteRow(i + 1);
+    }
+  }
+  // Append new rows (one per Post_ID or single array string based on preference)
+  // Here we use one per row for relational purity
+  postIds.forEach(pId => {
+    sheet.appendRow([userId, pId]);
+  });
 }
 ```

@@ -2,7 +2,7 @@
 import { AppData, UserType, ServiceType } from './types';
 
 // Replace this URL with your deployed Google Apps Script Web App URL
-export const GSHEET_API_URL = 'https://script.google.com/macros/s/AKfycbwb5fPfGwimcLPJC7eZEtOG-kbPWN_RTGTvBZwDlBMizHIdk4yEVhF8c3ru0czhjJvC/exec'; 
+export const GSHEET_API_URL = 'https://script.google.com/macros/s/AKfycbxJ1W8GZ228VtWmMZc9u0nN_okgc4STocTE5H-TImvDyH6yhxEHyZFjTFNmktgQzEae/exec'; 
 
 export const INITIAL_DATA: AppData = {
   users: [

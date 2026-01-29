@@ -90,13 +90,49 @@ export default function App() {
 
       const rawSelections = (remoteData.userPostSelections || {}) as Record<string, any>;
       const sanitizedSelections: Record<number, number[]> = {};
+      
       Object.keys(rawSelections).forEach(key => {
-        const numericKey = Math.floor(Number(key));
-        if (!isNaN(numericKey)) {
-          const val = rawSelections[key];
-          sanitizedSelections[numericKey] = Array.isArray(val) 
-            ? val.map(v => Math.floor(Number(v))).filter(v => !isNaN(v)) 
-            : [];
+        const numericUserKey = Math.floor(Number(key));
+        if (!isNaN(numericUserKey)) {
+          const rawVal = rawSelections[key];
+          let parsedIds: number[] = [];
+
+          const processValue = (v: any) => {
+            if (v === null || v === undefined) return;
+            
+            if (Array.isArray(v)) {
+              v.forEach(processValue);
+            } else if (typeof v === 'string') {
+              const trimmed = v.trim();
+              if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+                try {
+                  const arr = JSON.parse(trimmed);
+                  if (Array.isArray(arr)) arr.forEach(processValue);
+                } catch (e) {
+                  // Handle malformed brackets like [1, 2] that aren't strict JSON
+                  const stripped = trimmed.replace(/[\[\]]/g, '');
+                  stripped.split(',').forEach(item => {
+                    const n = Math.floor(Number(item.trim()));
+                    if (!isNaN(n)) parsedIds.push(n);
+                  });
+                }
+              } else if (trimmed.includes(',')) {
+                // Handle comma separated without brackets
+                trimmed.split(',').forEach(item => {
+                  const n = Math.floor(Number(item.trim()));
+                  if (!isNaN(n)) parsedIds.push(n);
+                });
+              } else {
+                const n = Math.floor(Number(trimmed));
+                if (!isNaN(n)) parsedIds.push(n);
+              }
+            } else if (typeof v === 'number' && !isNaN(v)) {
+              parsedIds.push(Math.floor(v));
+            }
+          };
+
+          processValue(rawVal);
+          sanitizedSelections[numericUserKey] = Array.from(new Set(parsedIds));
         }
       });
 
@@ -132,7 +168,7 @@ export default function App() {
   }, [currentUser, data.employees, data.offices]);
 
   const performSync = async (action: string, payload: any, newState: AppData, listKey: keyof AppData, idKey: string) => {
-    if (isSyncing) return;
+    if (isSyncing) return { success: false, error: 'Sync already in progress' };
     setIsSyncing(true);
     setSyncError(null);
     setData(newState);
@@ -159,9 +195,9 @@ export default function App() {
         try { localStorage.setItem('ems_data', JSON.stringify(updatedData)); } catch (e) {}
       }
       setLastSynced(new Date());
-      loadData(false);
     }
     setIsSyncing(false);
+    return result;
   };
 
   const upsertUser = (user: User) => {
@@ -204,11 +240,11 @@ export default function App() {
     performSync('deleteOffice', { Office_ID: id }, { ...data, offices: newOffices }, 'offices', 'Office_ID');
   };
 
-  const upsertBank = (bank: Bank) => {
+  const upsertBank = async (bank: Bank) => {
     const isNew = !bank.Bank_ID || Number(bank.Bank_ID) === 0;
     const payload = { ...bank, Bank_ID: isNew ? 0 : bank.Bank_ID };
     const newBanks = isNew ? [...data.banks, payload] : data.banks.map(b => b.Bank_ID === bank.Bank_ID ? bank : b);
-    performSync('upsertBank', payload, { ...data, banks: newBanks as Bank[] }, 'banks', 'Bank_ID');
+    return await performSync('upsertBank', payload, { ...data, banks: newBanks as Bank[] }, 'banks', 'Bank_ID');
   };
 
   const deleteBank = (bankId: number) => {
@@ -217,11 +253,11 @@ export default function App() {
     performSync('deleteBank', { Bank_ID: id }, { ...data, banks: newBanks }, 'banks', 'Bank_ID');
   };
 
-  const upsertBranch = (branch: BankBranch) => {
+  const upsertBranch = async (branch: BankBranch) => {
     const isNew = !branch.Branch_ID || Number(branch.Branch_ID) === 0;
     const payload = { ...branch, Branch_ID: isNew ? 0 : branch.Branch_ID };
     const newBranches = isNew ? [...data.branches, payload] : data.branches.map(b => b.Branch_ID === branch.Branch_ID ? branch : b);
-    performSync('upsertBranch', payload, { ...data, branches: newBranches as BankBranch[] }, 'branches', 'Branch_ID');
+    return await performSync('upsertBranch', payload, { ...data, branches: newBranches as BankBranch[] }, 'branches', 'Branch_ID');
   };
 
   const deleteBranch = (branchId: number) => {
@@ -338,7 +374,6 @@ export default function App() {
           onEdit={setEditingEmployee}
           onAddNew={() => setActiveTab('employeeForm')}
           onDelete={deleteEmployee}
-          onToggleStatus={toggleEmployeeStatus}
         />
       );
       case 'managePosts': return <UserPostSelection data={data} currentUser={currentUser} onToggle={togglePostSelection} />;

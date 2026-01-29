@@ -10,10 +10,9 @@ interface EmployeeListProps {
   onEdit: (emp: Employee) => void;
   onAddNew: () => void;
   onDelete: (empId: number) => void;
-  onToggleStatus: (empId: number) => void;
 }
 
-const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUser, onEdit, onAddNew, onDelete, onToggleStatus }) => {
+const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUser, onEdit, onAddNew, onDelete }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
@@ -110,9 +109,6 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUse
                   <td><span className="badge bg-primary-subtle text-primary fw-normal border border-primary-subtle px-2">{post}</span></td>
                   <td className="text-end pe-4">
                     <div className="d-flex gap-2 justify-content-end">
-                      <button onClick={() => onToggleStatus(emp.Employee_ID)} className={`btn btn-sm rounded-3 border ${isActive ? 'btn-light text-warning' : 'btn-light text-success'}`}>
-                        {isActive ? <UserMinus size={16} /> : <UserPlus size={16} />}
-                      </button>
                       <button onClick={() => onEdit(emp)} className="btn btn-light btn-sm rounded-3 border text-primary shadow-sm"><Edit2 size={16} /></button>
                       {isAdmin && <button onClick={() => onDelete(emp.Employee_ID)} className="btn btn-outline-danger btn-sm rounded-3"><Trash2 size={16} /></button>}
                     </div>

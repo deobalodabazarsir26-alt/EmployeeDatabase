@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Employee, AppData, ServiceType, User, Bank, BankBranch } from '../types';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { Employee, AppData, ServiceType, User, UserType, Bank, BankBranch, Post } from '../types';
 import { Save, User as UserIcon, Briefcase, Landmark, Hash, Search, Loader2, Power, ExternalLink, Camera, Scissors, Smartphone, CreditCard, ZoomIn, ZoomOut, Upload } from 'lucide-react';
 import { ifscService } from '../services/ifscService';
 
@@ -9,15 +9,15 @@ interface EmployeeFormProps {
   data: AppData;
   currentUser: User;
   onSave: (emp: Employee) => void;
-  onSaveBank: (bank: Bank) => void;
-  onSaveBranch: (branch: BankBranch) => void;
+  onSaveBank: (bank: Bank) => Promise<{ success: boolean; data?: any; error?: string }>;
+  onSaveBranch: (branch: BankBranch) => Promise<{ success: boolean; data?: any; error?: string }>;
   onCancel: () => void;
 }
 
 const DEACTIVATION_REASONS = ['Transfer', 'Death', 'Resign', 'Debarred'];
 const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024; // 2MB
 
-const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, onSave, onSaveBank, onSaveBranch, onCancel }) => {
+const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser, onSave, onSaveBank, onSaveBranch, onCancel }) => {
   const [formData, setFormData] = useState<Partial<Employee>>(employee || {
     Employee_ID: 0, // Placeholder for server-side sequential ID
     Gender: 'Male',
@@ -58,6 +58,30 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, onSave, onS
       setAvailableOffices([]);
     }
   }, [formData.Department_ID, data.offices]);
+
+  // LOGIC: Filter Designations based on "My Designations" mapping
+  const availablePosts = useMemo(() => {
+    const isAdmin = currentUser.User_Type === UserType.ADMIN;
+    if (isAdmin) return data.posts || [];
+
+    const currentUserIdNum = Math.floor(Number(currentUser.User_ID));
+    const selections = data.userPostSelections || {};
+    
+    // Check for matching user ID in mapping (handles numeric/string key variance)
+    let mappedIds = selections[currentUserIdNum];
+    if (!Array.isArray(mappedIds)) {
+      mappedIds = (selections as any)[currentUserIdNum.toString()];
+    }
+
+    const numericMappedIds = Array.isArray(mappedIds) ? mappedIds.map(id => Math.floor(Number(id))) : [];
+
+    return (data.posts || []).filter(post => {
+      const postId = Math.floor(Number(post.Post_ID));
+      // Show if: 1. It is mapped to this user OR 2. It is already the employee's existing designation
+      const isCurrentlyAssigned = employee && Math.floor(Number(employee.Post_ID)) === postId;
+      return numericMappedIds.includes(postId) || isCurrentlyAssigned;
+    });
+  }, [data.posts, data.userPostSelections, currentUser, employee]);
 
   const drawCropper = useCallback(() => {
     if (!sourceImage || !displayCanvasRef.current) return;
@@ -182,19 +206,41 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, onSave, onS
     if (!ifscInput || ifscInput.length !== 11) return alert('Enter valid 11-digit IFSC');
     setIsVerifyingIfsc(true);
     const details = await ifscService.fetchDetails(ifscInput);
-    setIsVerifyingIfsc(false);
     if (details) {
+      // 1. Resolve Bank
       let bank = data.banks.find(b => b.Bank_Name.toLowerCase().trim() === details.BANK.toLowerCase().trim());
       let targetBankId = bank ? Math.floor(Number(bank.Bank_ID)) : 0; 
       
+      if (targetBankId === 0) {
+        // Auto-create Bank if missing
+        const bankRes = await onSaveBank({ Bank_Name: details.BANK, Bank_ID: 0 } as Bank);
+        if (bankRes.success && bankRes.data) {
+          targetBankId = Math.floor(Number(bankRes.data.Bank_ID));
+        } else {
+          alert('Could not auto-register new Bank. Using default.');
+        }
+      }
+
+      // 2. Resolve Branch
       let branch = data.branches.find(b => b.IFSC_Code === details.IFSC);
       let targetBranchId = branch ? Math.floor(Number(branch.Branch_ID)) : 0;
 
+      if (targetBranchId === 0) {
+        // Auto-create Branch if missing
+        const branchRes = await onSaveBranch({ Branch_Name: details.BRANCH, IFSC_Code: details.IFSC, Bank_ID: targetBankId, Branch_ID: 0 } as BankBranch);
+        if (branchRes.success && branchRes.data) {
+          targetBranchId = Math.floor(Number(branchRes.data.Branch_ID));
+        } else {
+          alert('Could not auto-register new Branch.');
+        }
+      }
+
       setFormData(prev => ({ ...prev, Bank_ID: targetBankId, Branch_ID: targetBranchId, IFSC_Code: details.IFSC }));
-      alert(`Verified: ${details.BANK}, ${details.BRANCH}`);
+      alert(`Verified & Registered: ${details.BANK}, ${details.BRANCH}`);
     } else {
       alert('IFSC code not found.');
     }
+    setIsVerifyingIfsc(false);
   };
 
   const toBase64 = (file: File): Promise<string> => new Promise((resolve, reject) => {
@@ -419,7 +465,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, onSave, onS
           <label className="form-label small fw-bold text-muted">Designation *</label>
           <select value={formData.Post_ID ?? ''} onChange={e => setFormData({...formData, Post_ID: Number(e.target.value)})} className={`form-select fw-bold ${errors.Post_ID ? 'is-invalid' : ''}`}>
             <option value="">Select Designation...</option>
-            {data.posts.map(p => <option key={p.Post_ID} value={p.Post_ID}>{p.Post_Name}</option>)}
+            {availablePosts.map(p => <option key={p.Post_ID} value={p.Post_ID}>{p.Post_Name}</option>)}
           </select>
         </div>
         <div className="col-md-6">

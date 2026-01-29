@@ -25,7 +25,14 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = ({ data, activeTab, setActiveTab, currentUser, onLogout }) => {
   const userType = currentUser.User_Type;
   const userName = currentUser.User_Name;
-  const selectedCount = data.userPostSelections?.[currentUser.User_ID]?.length || 0;
+  const currentUserId = currentUser.User_ID;
+
+  // Robust count extraction that handles both number and string keys
+  const selectedCount = React.useMemo(() => {
+    const selections = data.userPostSelections || {};
+    const ids = selections[currentUserId] || (selections as any)[currentUserId.toString()];
+    return Array.isArray(ids) ? ids.length : 0;
+  }, [data.userPostSelections, currentUserId]);
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} />, adminOnly: false },
