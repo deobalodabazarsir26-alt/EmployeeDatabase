@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { AppData, User, UserType, Employee, Office, Bank, BankBranch, Department, Post, Payscale } from './types';
 import { INITIAL_DATA, GSHEET_API_URL } from './constants';
@@ -143,7 +144,6 @@ export default function App() {
       setSyncError(`Sync error: ${result.error}`);
       await loadData(false);
     } else {
-      // SUCCESS: If the server returned updated data (like Drive URLs), merge it!
       if (result.data) {
         const updatedObj = result.data;
         let updatedData = { ...newState };
@@ -311,11 +311,14 @@ export default function App() {
   const upsertEmployee = (employee: Employee) => {
     const now = new Date().toLocaleString();
     const exists = data.employees.find(e => Math.floor(Number(e.Employee_ID)) === Math.floor(Number(employee.Employee_ID)));
+    
+    // Maintain the files provided by the form
     const finalEmployee = {
       ...employee,
       T_STMP_ADD: exists ? exists.T_STMP_ADD : now,
       T_STMP_UPD: now
     };
+    
     const newEmployees = exists
       ? data.employees.map(e => Math.floor(Number(e.Employee_ID)) === Math.floor(Number(employee.Employee_ID)) ? finalEmployee : e)
       : [...data.employees, finalEmployee];

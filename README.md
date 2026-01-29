@@ -1,18 +1,65 @@
 # Employee Management System (EMS)
 
-## 🛠️ Master Google Apps Script (v2.3)
-Copy this entire block into your **Google Apps Script** editor (**Extensions > Apps Script**). 
-1. Paste the code.
-2. Click **Services (+)** and add the **"Drive API"**.
-3. Click **Deploy > New Deployment**.
-4. Select **Web App**, Execute as **Me**, Access **Anyone**.
-5. Update your `constants.tsx` with the new URL.
+## 🛠️ Master Google Apps Script (v2.9) - Final Permission Fix
+
+### 1. The Manifest (`appsscript.json`)
+You **must** enable this in **Project Settings** -> **Show manifest file**. Replace its content with this to force the Drive scope:
+```json
+{
+  "timeZone": "Asia/Kolkata",
+  "dependencies": {
+    "enabledAdvancedServices": [
+      {
+        "userSymbol": "Drive",
+        "serviceId": "drive",
+        "version": "v2"
+      }
+    ]
+  },
+  "webapp": {
+    "executeAs": "USER_DEPLOYING",
+    "access": "ANYONE"
+  },
+  "exceptionLogging": "STACKDRIVER",
+  "runtimeVersion": "V8",
+  "oauthScopes": [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive",
+    "https://www.googleapis.com/auth/script.external_request"
+  ]
+}
+```
+
+### 2. The Code (`Code.gs`)
+Replace your script with this block.
+**IMPORTANT:** After saving, you **MUST** click the **+** next to **Services** on the left, add **Drive API**, then run `checkConfig` to trigger the "Review Permissions" window.
 
 ```javascript
 /**
  * MASTER CRUD SCRIPT FOR EMS PRO
- * Version: 2.3 (Bidirectional Sync & Drive Integration)
+ * Version: 2.9 (Permission Bypass Edition)
  */
+
+const FOLDER_ID_PHOTOS = "1nohdez9u46-OmM6im7hD7OjGJhuHfKZm";
+const FOLDER_ID_DOCS = "1EFhL38Xlmj-fHhV3O2Vq2yquNY7elvam";
+
+/**
+ * TRIGGER THIS FUNCTION TO FIX PERMISSIONS:
+ * 1. Select 'checkConfig' in the toolbar.
+ * 2. Click 'Run'.
+ * 3. Click 'Review Permissions' -> Choose Account -> Advanced -> Go to ... (unsafe) -> Allow.
+ */
+function checkConfig() {
+  try {
+    const photoFolder = DriveApp.getFolderById(FOLDER_ID_PHOTOS);
+    const docFolder = DriveApp.getFolderById(FOLDER_ID_DOCS);
+    console.log("SUCCESS: Connection established to: " + photoFolder.getName());
+    return "SUCCESS: Folders Linked";
+  } catch (e) {
+    console.error("PERMISSION FAILED: " + e.message);
+    return "ERROR: " + e.message;
+  }
+}
 
 function doGet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -27,8 +74,7 @@ function doGet() {
     employees: getSheetData(ss, 'Employee'),
     userPostSelections: getSelectionData(ss)
   };
-  return ContentService.createTextOutput(JSON.stringify(data))
-    .setMimeType(ContentService.MimeType.JSON);
+  return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
 }
 
 function doPost(e) {
@@ -38,38 +84,77 @@ function doPost(e) {
     let payload = request.payload;
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     
-    let resultPayload = payload;
-
     if (action.startsWith('upsert')) {
       const entity = action.replace('upsert', '');
       const sheetName = (entity === 'Branch' || entity === 'bank_branchs') ? 'Bank_Branch' : entity;
-      resultPayload = upsertRow(ss, sheetName, payload);
+      payload = upsertRow(ss, sheetName, payload);
     } 
     else if (action.startsWith('delete')) {
       const entity = action.replace('delete', '');
       const sheetName = (entity === 'Branch' || entity === 'bank_branchs') ? 'Bank_Branch' : entity;
-      const idKey = Object.keys(payload)[0];
-      const idValue = payload[idKey];
-      deleteRow(ss, sheetName, idKey, idValue);
-    }
-    else if (action === 'updateUserPostSelections') {
-      updateSelections(ss, payload);
+      deleteRow(ss, sheetName, Object.keys(payload)[0], payload[Object.keys(payload)[0]]);
     }
 
-    return ContentService.createTextOutput(JSON.stringify({ 
-      status: 'success', 
-      data: resultPayload 
-    })).setMimeType(ContentService.MimeType.JSON);
-    
+    return ContentService.createTextOutput(JSON.stringify({ status: 'success', data: payload }))
+      .setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({ 
-      status: 'error', 
-      message: err.toString() 
-    })).setMimeType(ContentService.MimeType.JSON);
+    return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
   }
 }
 
-// --- CORE UTILITIES ---
+function upsertRow(ss, sheetName, data) {
+  const sheet = ss.getSheetByName(sheetName);
+  if (!sheet) throw new Error("Sheet missing: " + sheetName);
+  
+  // Handle Drive Uploads
+  if (data.photoData && data.photoData.base64) {
+    data.Photo = uploadFileToDrive(data.photoData, FOLDER_ID_PHOTOS);
+    delete data.photoData;
+  }
+  if (data.fileData && data.fileData.base64) {
+    data.DA_Doc = uploadFileToDrive(data.fileData, FOLDER_ID_DOCS);
+    delete data.fileData;
+  }
+
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const idValue = data[headers[0]];
+  const rows = sheet.getDataRange().getValues();
+  let rowIndex = -1;
+  
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i][0].toString().trim() === idValue.toString().trim()) { rowIndex = i + 1; break; }
+  }
+
+  const rowData = headers.map(h => {
+    const key = Object.keys(data).find(k => k.toLowerCase().trim() === h.toString().toLowerCase().trim());
+    return key ? data[key] : "";
+  });
+
+  if (rowIndex > 0) {
+    sheet.getRange(rowIndex, 1, 1, headers.length).setValues([rowData]);
+  } else {
+    sheet.appendRow(rowData);
+  }
+  return data;
+}
+
+function uploadFileToDrive(fileData, folderId) {
+  try {
+    const folder = DriveApp.getFolderById(folderId);
+    const decoded = Utilities.base64Decode(fileData.base64);
+    const blob = Utilities.newBlob(decoded, fileData.mimeType, fileData.name);
+    const file = folder.createFile(blob);
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    
+    if (fileData.mimeType.indexOf('image') !== -1) {
+      return "https://drive.google.com/thumbnail?id=" + file.getId() + "&sz=w1000";
+    }
+    return file.getUrl();
+  } catch (e) {
+    return "DRIVE_ERR: " + e.message;
+  }
+}
 
 function getSheetData(ss, name) {
   const sheet = ss.getSheetByName(name);
@@ -84,91 +169,12 @@ function getSheetData(ss, name) {
   });
 }
 
-function upsertRow(ss, sheetName, data) {
-  const sheet = ss.getSheetByName(sheetName);
-  if (!sheet) throw new Error("Sheet '" + sheetName + "' not found.");
-  
-  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-  const idKey = headers[0]; 
-  const idValue = data[idKey];
-
-  // 1. UPLOAD PHOTO
-  if (data.photoData && data.photoData.base64) {
-    try {
-      data.Photo = uploadFileToDrive(data.photoData, "EMS_Employee_Photos");
-      console.log("Photo Upload Success: " + data.Photo);
-    } catch (e) { console.error("Photo Error: " + e.toString()); }
-    delete data.photoData;
-  }
-
-  // 2. UPLOAD DOCUMENT
-  if (data.fileData && data.fileData.base64) {
-    try {
-      data.DA_Doc = uploadFileToDrive(data.fileData, "EMS_Deactivation_Docs");
-      console.log("Doc Upload Success: " + data.DA_Doc);
-    } catch (e) { console.error("Doc Error: " + e.toString()); }
-    delete data.fileData;
-  }
-  
-  const vals = sheet.getDataRange().getValues();
-  let rowIndex = -1;
-  const searchId = idValue.toString().trim();
-  
-  for (let i = 1; i < vals.length; i++) {
-    if (vals[i][0].toString().trim() === searchId) { 
-      rowIndex = i + 1; 
-      break; 
-    }
-  }
-
-  const rowData = headers.map(h => {
-    const val = data[h];
-    return (val === undefined || val === null) ? "" : val;
-  });
-
-  if (rowIndex > 0) {
-    sheet.getRange(rowIndex, 1, 1, headers.length).setValues([rowData]);
-  } else {
-    sheet.appendRow(rowData);
-  }
-  
-  return data; // Return updated object with new URLs
-}
-
-function uploadFileToDrive(fileData, folderName) {
-  let folder;
-  const folders = DriveApp.getFoldersByName(folderName);
-  if (folders.hasNext()) {
-    folder = folders.next();
-  } else {
-    folder = DriveApp.createFolder(folderName);
-    folder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-  }
-
-  const decoded = Utilities.base64Decode(fileData.base64);
-  const blob = Utilities.newBlob(decoded, fileData.mimeType, fileData.name);
-  const file = folder.createFile(blob);
-  
-  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-  const fileId = file.getId();
-  
-  if (fileData.mimeType.indexOf('image') !== -1) {
-    return "https://drive.google.com/thumbnail?id=" + fileId + "&sz=w1000";
-  }
-  return file.getUrl();
-}
-
 function deleteRow(ss, sheetName, idKey, idValue) {
   const sheet = ss.getSheetByName(sheetName);
   if (!sheet) return;
-  const data = sheet.getDataRange().getValues();
-  const targetId = idValue.toString().trim();
-
-  for (let i = data.length - 1; i >= 1; i--) {
-    if (data[i][0].toString().trim() === targetId) {
-      sheet.deleteRow(i + 1);
-      return; 
-    }
+  const vals = sheet.getDataRange().getValues();
+  for (let i = vals.length - 1; i >= 1; i--) {
+    if (vals[i][0].toString().trim() === idValue.toString().trim()) { sheet.deleteRow(i + 1); break; }
   }
 }
 
@@ -180,28 +186,10 @@ function getSelectionData(ss) {
   vals.shift();
   const map = {};
   vals.forEach(r => {
-    const uId = Math.floor(Number(r[0])).toString();
+    const uId = r[0].toString();
     if (!map[uId]) map[uId] = [];
-    const pId = Math.floor(Number(r[1]));
-    if (!isNaN(pId)) map[uId].push(pId);
+    map[uId].push(Number(r[1]));
   });
   return map;
-}
-
-function updateSelections(ss, payload) {
-  let sheet = ss.getSheetByName('UserPostSelections');
-  if (!sheet) {
-    sheet = ss.insertSheet('UserPostSelections');
-    sheet.appendRow(['User_ID', 'Post_ID']);
-  }
-  const userId = Math.floor(Number(payload.User_ID));
-  const postIds = payload.Post_IDs;
-  const vals = sheet.getDataRange().getValues();
-  for (let i = vals.length - 1; i >= 1; i--) {
-    if (Math.floor(Number(vals[i][0])) == userId) sheet.deleteRow(i + 1);
-  }
-  if (Array.isArray(postIds)) {
-    postIds.forEach(pId => sheet.appendRow([userId, Math.floor(Number(pId))]));
-  }
 }
 ```

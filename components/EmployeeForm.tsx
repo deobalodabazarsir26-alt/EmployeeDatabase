@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Employee, AppData, ServiceType, User, UserType, Bank, BankBranch } from '../types';
 import { Save, X, Info, User as UserIcon, Briefcase, Landmark, AlertCircle, Hash, Activity, Search, Loader2, Power, FileText, Upload, ExternalLink, Camera, Scissors, Smartphone, CreditCard, Crop, Check, ZoomIn, ZoomOut, Move } from 'lucide-react';
@@ -29,7 +30,6 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
   const [isVerifyingIfsc, setIsVerifyingIfsc] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   
-  // File & Cropping states
   const [selectedDoc, setSelectedDoc] = useState<File | null>(null);
   const [croppedPhotoBase64, setCroppedPhotoBase64] = useState<string | null>(null);
   const [showCropper, setShowCropper] = useState(false);
@@ -86,7 +86,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
     if (canvas.height !== targetHeight) canvas.height = targetHeight;
 
     ctx.clearRect(0, 0, targetWidth, targetHeight);
-    ctx.fillStyle = '#1e293b'; // Dark background for focus
+    ctx.fillStyle = '#1e293b'; 
     ctx.fillRect(0, 0, targetWidth, targetHeight);
 
     const scaleX = targetWidth / sourceImage.width;
@@ -98,12 +98,10 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
     const drawHeight = sourceImage.height * finalScale;
 
     ctx.save();
-    // Use canvas center as translation origin for stable zoom
     ctx.translate(targetWidth / 2 + offset.x, targetHeight / 2 + offset.y);
     ctx.drawImage(sourceImage, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
     ctx.restore();
 
-    // Visual guide frame
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
     ctx.setLineDash([5, 5]);
     ctx.strokeRect(5, 5, targetWidth - 10, targetHeight - 10);
@@ -126,10 +124,8 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
         const rect = canvas.getBoundingClientRect();
         const scaleX = canvas.width / rect.width;
         const scaleY = canvas.height / rect.height;
-        
         const newX = offsetRef.current.x + (dx * scaleX);
         const newY = offsetRef.current.y + (dy * scaleY);
-        
         offsetRef.current = { x: newX, y: newY };
         setOffset({ x: newX, y: newY });
       }
@@ -139,7 +135,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
     const onMouseMove = (e: MouseEvent) => handleGlobalMove(e.clientX, e.clientY);
     const onTouchMove = (e: TouchEvent) => {
       if (e.touches.length === 1) {
-        e.preventDefault(); // Block scrolling
+        e.preventDefault(); 
         handleGlobalMove(e.touches[0].clientX, e.touches[0].clientY);
       }
     };
@@ -166,7 +162,6 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
 
   const confirmCrop = () => {
     if (!displayCanvasRef.current) return;
-    // Export at high quality for cloud storage
     const dataUrl = displayCanvasRef.current.toDataURL('image/jpeg', 0.9);
     setCroppedPhotoBase64(dataUrl.split(',')[1]);
     setShowCropper(false);
@@ -201,37 +196,19 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
   const handleIfscVerify = async () => {
     const ifscInput = formData.IFSC_Code?.trim().toUpperCase();
     if (!ifscInput || ifscInput.length !== 11) return alert('Enter valid 11-digit IFSC');
-    
     setIsVerifyingIfsc(true);
     const details = await ifscService.fetchDetails(ifscInput);
     setIsVerifyingIfsc(false);
-    
     if (details) {
       let bank = data.banks.find(b => b.Bank_Name.toLowerCase().trim() === details.BANK.toLowerCase().trim());
-      let targetBankId: number;
-      if (!bank) {
-        targetBankId = generateUniqueId();
-        onSaveBank({ Bank_ID: targetBankId, Bank_Name: details.BANK });
-      } else {
-        targetBankId = Math.floor(Number(bank.Bank_ID));
-      }
+      let targetBankId = bank ? Math.floor(Number(bank.Bank_ID)) : generateUniqueId();
+      if (!bank) onSaveBank({ Bank_ID: targetBankId, Bank_Name: details.BANK });
 
       let branch = data.branches.find(b => b.IFSC_Code === details.IFSC);
-      let targetBranchId: number;
-      if (!branch) {
-        targetBranchId = generateUniqueId();
-        onSaveBranch({ Branch_ID: targetBranchId, Branch_Name: details.BRANCH, IFSC_Code: details.IFSC, Bank_ID: targetBankId });
-      } else {
-        targetBranchId = Math.floor(Number(branch.Branch_ID));
-        targetBankId = Math.floor(Number(branch.Bank_ID));
-      }
+      let targetBranchId = branch ? Math.floor(Number(branch.Branch_ID)) : generateUniqueId();
+      if (!branch) onSaveBranch({ Branch_ID: targetBranchId, Branch_Name: details.BRANCH, IFSC_Code: details.IFSC, Bank_ID: targetBankId });
 
-      setFormData(prev => ({
-        ...prev,
-        Bank_ID: targetBankId,
-        Branch_ID: targetBranchId,
-        IFSC_Code: details.IFSC
-      }));
+      setFormData(prev => ({ ...prev, Bank_ID: targetBankId, Branch_ID: targetBranchId, IFSC_Code: details.IFSC }));
       alert(`Verified: ${details.BANK}, ${details.BRANCH}`);
     } else {
       alert('IFSC code not found.');
@@ -242,8 +219,11 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
     const reader = new FileReader();
     reader.readAsDataURL(file);
     reader.onload = () => {
-      const base64 = (reader.result as string).split(',')[1];
-      resolve(base64);
+      if (typeof reader.result === 'string') {
+        resolve(reader.result.split(',')[1]);
+      } else {
+        reject(new Error("File conversion failed"));
+      }
     };
     reader.onerror = reject;
   });
@@ -254,16 +234,13 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
       setIsUploading(true);
       const payload: any = { ...formData };
       try {
-        // Handle Cropped Image Data
         if (croppedPhotoBase64) {
           payload.photoData = {
             base64: croppedPhotoBase64,
-            name: `emp_${formData.Employee_ID}_${Date.now()}.jpg`,
+            name: `photo_${formData.Employee_ID}_${Date.now()}.jpg`,
             mimeType: 'image/jpeg'
           };
         }
-        
-        // Handle Document Data
         if (selectedDoc) {
           const docBase64 = await toBase64(selectedDoc);
           payload.fileData = {
@@ -272,11 +249,10 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
             mimeType: selectedDoc.type
           };
         }
-        
         onSave(payload as Employee);
       } catch (err) {
-        console.error("Submission error:", err);
-        alert('File processing error. Ensure files are under 2MB.');
+        console.error("Submission failed:", err);
+        alert('Could not process files for upload. Ensure they are under 2MB.');
         setIsUploading(false);
       }
     }
@@ -309,11 +285,8 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
     }
   };
 
-  const availablePosts = data.posts || [];
-
   return (
     <div className="card shadow-lg border-0 p-4 p-md-5 animate-in">
-      {/* CROPPER OVERLAY */}
       {showCropper && (
         <div className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style={{ zIndex: 3000, backgroundColor: 'rgba(15, 23, 42, 0.96)', backdropFilter: 'blur(10px)' }}>
           <div className="bg-white p-4 rounded-4 shadow-2xl text-center" style={{ maxWidth: '440px', width: '90%' }}>
@@ -334,9 +307,6 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
                 <input type="range" className="form-range" min="1" max="4" step="0.01" value={zoom} onChange={(e) => setZoom(parseFloat(e.target.value))} />
                 <ZoomIn size={18} className="text-muted" />
               </div>
-              <div className="tiny text-primary fw-bold text-uppercase d-flex align-items-center justify-content-center gap-2">
-                <Move size={14} /> Drag the image to center face within frame
-              </div>
             </div>
             <div className="d-flex gap-2">
               <button type="button" className="btn btn-light border w-100 rounded-pill fw-bold" onClick={() => setShowCropper(false)}>Cancel</button>
@@ -355,7 +325,6 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
       </div>
 
       <form onSubmit={handleSubmit} className="row g-4">
-        {/* PHOTO & IDENTITY */}
         <div className="col-12 col-lg-3 text-center mb-4">
           <div className="position-relative d-inline-block">
             <div 
@@ -365,7 +334,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
             >
               {croppedPhotoBase64 ? (
                 <img src={`data:image/jpeg;base64,${croppedPhotoBase64}`} className="w-100 h-100 object-fit-cover" alt="New" />
-              ) : formData.Photo ? (
+              ) : formData.Photo && !formData.Photo.includes('DRIVE_ERR') ? (
                 <img src={formData.Photo} className="w-100 h-100 object-fit-cover" alt="Existing" />
               ) : (
                 <div className="w-100 h-100 d-flex flex-column align-items-center justify-content-center text-muted p-3 bg-white">
@@ -374,6 +343,9 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
                 </div>
               )}
             </div>
+            {formData.Photo?.includes('DRIVE_ERR') && (
+                <div className="text-danger tiny fw-bold mt-1">Upload Failed: Check Permissions</div>
+            )}
             <button type="button" className="btn btn-primary btn-sm rounded-circle position-absolute bottom-0 end-0 shadow-lg border-3 border-white" style={{ width: '48px', height: '48px', transform: 'translate(25%, 25%)' }} onClick={() => photoInputRef.current?.click()}>
               <Upload size={20} />
             </button>
@@ -415,7 +387,6 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
             </div>
         </div>
 
-        {/* PERSONAL */}
         <div className="col-12 mt-4">
           <div className="d-flex align-items-center gap-2 mb-3 text-primary fw-bold border-start border-4 border-primary ps-3 bg-primary-subtle py-2 rounded-end">
             <UserIcon size={18} /> Personal Profile
@@ -438,7 +409,6 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
           </select>
         </div>
 
-        {/* ORGANIZATIONAL */}
         <div className="col-12 mt-5">
           <div className="d-flex align-items-center gap-2 mb-3 text-primary fw-bold border-start border-4 border-primary ps-3 bg-primary-subtle py-2 rounded-end">
             <Briefcase size={18} /> Organizational Placement
@@ -468,7 +438,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
           <label className="form-label small fw-bold text-muted">Designation *</label>
           <select value={formData.Post_ID ?? ''} onChange={e => setFormData({...formData, Post_ID: Number(e.target.value)})} className={`form-select fw-bold ${errors.Post_ID ? 'is-invalid' : ''}`}>
             <option value="">Select Designation...</option>
-            {availablePosts.map(p => <option key={p.Post_ID} value={p.Post_ID}>{p.Post_Name}</option>)}
+            {data.posts.map(p => <option key={p.Post_ID} value={p.Post_ID}>{p.Post_Name}</option>)}
           </select>
         </div>
         <div className="col-md-6">
@@ -479,7 +449,6 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
           </select>
         </div>
 
-        {/* BANKING */}
         <div className="col-12 mt-5">
           <div className="d-flex align-items-center gap-2 mb-3 text-primary fw-bold border-start border-4 border-primary ps-3 bg-primary-subtle py-2 rounded-end">
             <Landmark size={18} /> Banking & Financial
@@ -492,7 +461,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
                         <label className="form-label small fw-bold text-primary text-uppercase tracking-wider">IFSC Validation *</label>
                         <div className="input-group input-group-lg shadow-sm">
                             <span className="input-group-text bg-primary text-white border-primary"><Hash size={24} /></span>
-                            <input value={formData.IFSC_Code || ''} onChange={e => setFormData({...formData, IFSC_Code: e.target.value.toUpperCase()})} className="form-control fw-bold text-primary border-primary" placeholder="IFSC" style={{ letterSpacing: '1px' }} />
+                            <input value={formData.IFSC_Code || ''} onChange={e => setFormData({...formData, IFSC_Code: e.target.value.toUpperCase()})} className="form-control fw-bold text-primary border-primary" placeholder="IFSC" />
                             <button type="button" onClick={handleIfscVerify} className="btn btn-primary px-4 d-flex align-items-center gap-2" disabled={isVerifyingIfsc}>
                                 {isVerifyingIfsc ? <Loader2 size={24} className="animate-spin" /> : <Search size={24} />}
                                 <span className="d-none d-md-inline fw-bold">Verify</span>
@@ -507,26 +476,9 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
                         </div>
                     </div>
                 </div>
-                <div className="row g-3 mt-4 pt-3 border-top">
-                    <div className="col-md-6">
-                        <label className="form-label tiny fw-bold text-muted uppercase">Institution</label>
-                        <select value={formData.Bank_ID ?? ''} onChange={e => setFormData({...formData, Bank_ID: Number(e.target.value)})} className={`form-select bg-light border-0 fw-bold ${errors.Bank_ID ? 'is-invalid' : ''}`}>
-                            <option value="">-- Bank --</option>
-                            {data.banks.map(b => <option key={b.Bank_ID} value={b.Bank_ID}>{b.Bank_Name}</option>)}
-                        </select>
-                    </div>
-                    <div className="col-md-6">
-                        <label className="form-label tiny fw-bold text-muted uppercase">Branch Location</label>
-                        <select value={formData.Branch_ID ?? ''} onChange={e => setFormData({...formData, Branch_ID: Number(e.target.value)})} className={`form-select bg-light border-0 fw-bold ${errors.Branch_ID ? 'is-invalid' : ''}`}>
-                            <option value="">-- Branch --</option>
-                            {availableBranches.map(b => <option key={b.Branch_ID} value={b.Branch_ID}>{b.Branch_Name}</option>)}
-                        </select>
-                    </div>
-                </div>
             </div>
         </div>
 
-        {/* STATUS */}
         <div className="col-12 mt-5">
           <div className="d-flex align-items-center gap-2 mb-3 text-primary fw-bold border-start border-4 border-primary ps-3 bg-primary-subtle py-2 rounded-end">
             <Power size={18} /> Account Status
@@ -552,12 +504,15 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
               <label className="form-label small fw-bold text-muted">Verification Proof (DA_Doc) *</label>
               <div className="input-group shadow-sm">
                 <input type="file" ref={docInputRef} className={`form-control ${errors.Doc ? 'is-invalid' : ''}`} onChange={(e) => handleFileChange(e, 'doc')} accept=".pdf,image/*" />
-                {formData.DA_Doc && (
+                {formData.DA_Doc && !formData.DA_Doc.includes('DRIVE_ERR') && (
                     <a href={formData.DA_Doc} target="_blank" rel="noopener noreferrer" className="btn btn-outline-info">
                         <ExternalLink size={16}/>
                     </a>
                 )}
               </div>
+              {formData.DA_Doc?.includes('DRIVE_ERR') && (
+                <div className="text-danger tiny fw-bold mt-1">Upload Failed: Check Permissions</div>
+              )}
             </div>
           </>
         )}
@@ -576,8 +531,6 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
         .object-fit-cover { object-fit: cover; }
         .animate-in { animation: fadeInScale 0.4s ease-out; }
         @keyframes fadeInScale { from { opacity: 0; transform: scale(0.98) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
-        .shadow-2xl { box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); }
-        .shadow-inner { box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.06); }
       `}</style>
     </div>
   );

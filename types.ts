@@ -99,6 +99,9 @@ export interface Employee {
   DA_Doc?: string;
   T_STMP_ADD: string;
   T_STMP_UPD: string;
+  // Temporary file payloads for sync
+  photoData?: { base64: string; name: string; mimeType: string };
+  fileData?: { base64: string; name: string; mimeType: string };
 }
 
 export type AppData = {

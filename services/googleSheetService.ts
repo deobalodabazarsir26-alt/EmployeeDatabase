@@ -1,3 +1,4 @@
+
 import { AppData } from '../types';
 import { GSHEET_API_URL } from '../constants';
 
@@ -26,7 +27,10 @@ export const syncService = {
       return { success: true };
     }
     
-    console.log(`Cloud Sync Initiated: [${action}]`);
+    console.log(`Cloud Sync Initiated: [${action}]`, { 
+      hasPhoto: !!payload.photoData, 
+      hasFile: !!payload.fileData 
+    });
     
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 90000);
@@ -45,10 +49,12 @@ export const syncService = {
       try {
         result = JSON.parse(responseText);
       } catch (e) {
-        throw new Error(`Server returned invalid response: ${responseText.substring(0, 100)}`);
+        console.error('Server returned non-JSON response:', responseText);
+        throw new Error(`Server side error or script timeout. Check Apps Script logs.`);
       }
 
       if (result.status === 'error') {
+        console.error('Server returned explicit error:', result.message);
         return { success: false, error: result.message };
       }
       
