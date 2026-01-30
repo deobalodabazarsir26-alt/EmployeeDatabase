@@ -190,8 +190,8 @@ const OfficeManagement: React.FC<OfficeManagementProps> = ({ data, onSaveOffice,
                 return (
                   <tr key={office.Office_ID}>
                     <td className="ps-4 py-3">
-                      <div className="fw-bold text-dark">{office.Office_Name}</div>
-                      <div className="tiny text-muted uppercase">{dept?.Department_Name || 'No Department'} • ID: #{office.Office_ID}</div>
+                      <div className="fw-bold text-dark">{office.Office_Name} (#${office.Office_ID})</div>
+                      <div className="tiny text-muted uppercase">{dept?.Department_Name || 'No Department'}</div>
                     </td>
                     <td>
                       <div className="d-flex align-items-center gap-2">

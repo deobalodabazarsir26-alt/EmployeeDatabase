@@ -452,7 +452,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, data, currentUser
           <label className="form-label small fw-bold text-muted">Office *</label>
           <select value={formData.Office_ID ?? ''} onChange={e => setFormData({...formData, Office_ID: Number(e.target.value)})} className={`form-select ${errors.Office_ID ? 'is-invalid' : ''}`}>
             <option value="">Select Office...</option>
-            {availableOffices.map(o => <option key={o.Office_ID} value={o.Office_ID}>{o.Office_Name}</option>)}
+            {availableOffices.map(o => <option key={o.Office_ID} value={o.Office_ID}>{o.Office_Name} (#${o.Office_ID})</option>)}
           </select>
         </div>
         <div className="col-md-4">

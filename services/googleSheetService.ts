@@ -7,7 +7,8 @@ export const syncService = {
     if (!GSHEET_API_URL) return null;
     
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000);
+    // Increased timeout to 120s for slow cold starts
+    const timeoutId = setTimeout(() => controller.abort(), 120000);
 
     try {
       const response = await fetch(GSHEET_API_URL, { signal: controller.signal });
@@ -16,7 +17,11 @@ export const syncService = {
       if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
       return await response.json();
     } catch (error: any) {
-      console.error('Error fetching data from cloud:', error);
+      if (error.name === 'AbortError') {
+        console.error('Fetch operation timed out (120s limit reached).');
+      } else {
+        console.error('Error fetching data from cloud:', error);
+      }
       return null;
     }
   },
@@ -33,7 +38,8 @@ export const syncService = {
     });
     
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 90000);
+    // Save operations get more time due to file uploads
+    const timeoutId = setTimeout(() => controller.abort(), 180000);
 
     try {
       const response = await fetch(GSHEET_API_URL, {
@@ -60,7 +66,7 @@ export const syncService = {
       
       return { success: true, data: result.data };
     } catch (error: any) {
-      const message = error.name === 'AbortError' ? 'Request timed out' : (error instanceof Error ? error.message : 'Network error');
+      const message = error.name === 'AbortError' ? 'Request timed out after 3 minutes' : (error instanceof Error ? error.message : 'Network error');
       console.error(`Cloud Sync Failed: [${action}]`, message);
       return { success: false, error: message };
     }

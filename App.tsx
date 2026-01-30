@@ -14,6 +14,7 @@ import UserPostSelection from './components/UserPostSelection';
 import UserManagement from './components/UserManagement';
 import DepartmentManagement from './components/DepartmentManagement';
 import ServiceMasterManagement from './components/ServiceMasterManagement';
+import FinalizationModule from './components/FinalizationModule';
 import { RefreshCw, CheckCircle, AlertCircle, Clock } from 'lucide-react';
 
 // Using 0 as a placeholder to signal the Apps Script to generate a sequential ID
@@ -26,7 +27,7 @@ export default function App() {
       if (savedUser) {
         const parsed = JSON.parse(savedUser);
         if (parsed && parsed.User_ID !== undefined) {
-          parsed.User_ID = Number(parsed.User_ID);
+          parsed.User_ID = Math.floor(Number(parsed.User_ID));
         }
         return parsed;
       }
@@ -109,7 +110,6 @@ export default function App() {
                   const arr = JSON.parse(trimmed);
                   if (Array.isArray(arr)) arr.forEach(processValue);
                 } catch (e) {
-                  // Handle malformed brackets like [1, 2] that aren't strict JSON
                   const stripped = trimmed.replace(/[\[\]]/g, '');
                   stripped.split(',').forEach(item => {
                     const n = Math.floor(Number(item.trim()));
@@ -117,7 +117,6 @@ export default function App() {
                   });
                 }
               } else if (trimmed.includes(',')) {
-                // Handle comma separated without brackets
                 trimmed.split(',').forEach(item => {
                   const n = Math.floor(Number(item.trim()));
                   if (!isNaN(n)) parsedIds.push(n);
@@ -185,7 +184,11 @@ export default function App() {
       
       if (Array.isArray(list)) {
         const updatedList = list.map((item: any) => {
-          if (item[idKey] === serverObj[idKey] || (Number(item[idKey]) === 0 && action.startsWith('upsert'))) {
+          // Robust numeric ID comparison
+          const localId = Math.floor(Number(item[idKey]));
+          const remoteId = Math.floor(Number(serverObj[idKey]));
+          
+          if (localId === remoteId || (localId === 0 && action.startsWith('upsert'))) {
             return serverObj;
           }
           return item;
@@ -203,124 +206,110 @@ export default function App() {
   const upsertUser = (user: User) => {
     const isNew = !user.User_ID || Number(user.User_ID) === 0;
     const payload = { ...user, User_ID: isNew ? 0 : user.User_ID };
-    const newUsers = isNew ? [...data.users, payload] : data.users.map(u => u.User_ID === user.User_ID ? user : u);
-    performSync('upsertUser', payload, { ...data, users: newUsers as User[] }, 'users', 'User_ID');
+    const newUsers = isNew ? [...data.users, payload] : data.users.map(u => Math.floor(Number(u.User_ID)) === Math.floor(Number(user.User_ID)) ? user : u);
+    return performSync('upsertUser', payload, { ...data, users: newUsers as User[] }, 'users', 'User_ID');
   };
 
   const deleteUser = (userId: number) => {
     const id = Math.floor(Number(userId));
     if (data.offices.some(o => Math.floor(Number(o.User_ID)) === id)) return alert("User is active custodian for offices.");
     const newUsers = data.users.filter(u => Math.floor(Number(u.User_ID)) !== id);
-    performSync('deleteUser', { User_ID: id }, { ...data, users: newUsers }, 'users', 'User_ID');
+    return performSync('deleteUser', { User_ID: id }, { ...data, users: newUsers }, 'users', 'User_ID');
   };
 
   const upsertDepartment = (dept: Department) => {
     const isNew = !dept.Department_ID || Number(dept.Department_ID) === 0;
     const payload = { ...dept, Department_ID: isNew ? 0 : dept.Department_ID };
-    const newDepts = isNew ? [...data.departments, payload] : data.departments.map(d => d.Department_ID === dept.Department_ID ? dept : d);
-    performSync('upsertDepartment', payload, { ...data, departments: newDepts as Department[] }, 'departments', 'Department_ID');
+    const newDepts = isNew ? [...data.departments, payload] : data.departments.map(d => Math.floor(Number(d.Department_ID)) === Math.floor(Number(dept.Department_ID)) ? dept : d);
+    return performSync('upsertDepartment', payload, { ...data, departments: newDepts as Department[] }, 'departments', 'Department_ID');
   };
 
   const deleteDepartment = (deptId: number) => {
     const id = Math.floor(Number(deptId));
     const newDepts = data.departments.filter(d => Math.floor(Number(d.Department_ID)) !== id);
-    performSync('deleteDepartment', { Department_ID: id }, { ...data, departments: newDepts }, 'departments', 'Department_ID');
+    return performSync('deleteDepartment', { Department_ID: id }, { ...data, departments: newDepts }, 'departments', 'Department_ID');
   };
 
   const upsertOffice = (office: Office) => {
     const isNew = !office.Office_ID || Number(office.Office_ID) === 0;
     const payload = { ...office, Office_ID: isNew ? 0 : office.Office_ID };
-    const newOffices = isNew ? [...data.offices, payload] : data.offices.map(o => o.Office_ID === office.Office_ID ? office : o);
-    performSync('upsertOffice', payload, { ...data, offices: newOffices as Office[] }, 'offices', 'Office_ID');
+    const newOffices = isNew ? [...data.offices, payload] : data.offices.map(o => Math.floor(Number(o.Office_ID)) === Math.floor(Number(office.Office_ID)) ? office : o);
+    return performSync('upsertOffice', payload, { ...data, offices: newOffices as Office[] }, 'offices', 'Office_ID');
   };
 
   const deleteOffice = (officeId: number) => {
     const id = Math.floor(Number(officeId));
     const newOffices = data.offices.filter(o => Math.floor(Number(o.Office_ID)) !== id);
-    performSync('deleteOffice', { Office_ID: id }, { ...data, offices: newOffices }, 'offices', 'Office_ID');
+    return performSync('deleteOffice', { Office_ID: id }, { ...data, offices: newOffices }, 'offices', 'Office_ID');
   };
 
   const upsertBank = async (bank: Bank) => {
     const isNew = !bank.Bank_ID || Number(bank.Bank_ID) === 0;
     const payload = { ...bank, Bank_ID: isNew ? 0 : bank.Bank_ID };
-    const newBanks = isNew ? [...data.banks, payload] : data.banks.map(b => b.Bank_ID === bank.Bank_ID ? bank : b);
+    const newBanks = isNew ? [...data.banks, payload] : data.banks.map(b => Math.floor(Number(b.Bank_ID)) === Math.floor(Number(bank.Bank_ID)) ? bank : b);
     return await performSync('upsertBank', payload, { ...data, banks: newBanks as Bank[] }, 'banks', 'Bank_ID');
   };
 
   const deleteBank = (bankId: number) => {
     const id = Math.floor(Number(bankId));
     const newBanks = data.banks.filter(b => Math.floor(Number(b.Bank_ID)) !== id);
-    performSync('deleteBank', { Bank_ID: id }, { ...data, banks: newBanks }, 'banks', 'Bank_ID');
+    return performSync('deleteBank', { Bank_ID: id }, { ...data, banks: newBanks }, 'banks', 'Bank_ID');
   };
 
   const upsertBranch = async (branch: BankBranch) => {
     const isNew = !branch.Branch_ID || Number(branch.Branch_ID) === 0;
     const payload = { ...branch, Branch_ID: isNew ? 0 : branch.Branch_ID };
-    const newBranches = isNew ? [...data.branches, payload] : data.branches.map(b => b.Branch_ID === branch.Branch_ID ? branch : b);
+    const newBranches = isNew ? [...data.branches, payload] : data.branches.map(b => Math.floor(Number(b.Branch_ID)) === Math.floor(Number(branch.Branch_ID)) ? branch : b);
     return await performSync('upsertBranch', payload, { ...data, branches: newBranches as BankBranch[] }, 'branches', 'Branch_ID');
   };
 
   const deleteBranch = (branchId: number) => {
     const id = Math.floor(Number(branchId));
     const newBranches = data.branches.filter(b => Math.floor(Number(b.Branch_ID)) !== id);
-    performSync('deleteBranch', { Branch_ID: id }, { ...data, branches: newBranches }, 'branches', 'Branch_ID');
+    return performSync('deleteBranch', { Branch_ID: id }, { ...data, branches: newBranches }, 'branches', 'Branch_ID');
   };
 
   const upsertPost = (post: Post) => {
     const isNew = !post.Post_ID || Number(post.Post_ID) === 0;
     const payload = { ...post, Post_ID: isNew ? 0 : post.Post_ID };
-    const newPosts = isNew ? [...data.posts, payload] : data.posts.map(p => p.Post_ID === post.Post_ID ? post : p);
-    performSync('upsertPost', payload, { ...data, posts: newPosts as Post[] }, 'posts', 'Post_ID');
+    const newPosts = isNew ? [...data.posts, payload] : data.posts.map(p => Math.floor(Number(p.Post_ID)) === Math.floor(Number(post.Post_ID)) ? post : p);
+    return performSync('upsertPost', payload, { ...data, posts: newPosts as Post[] }, 'posts', 'Post_ID');
   };
 
   const deletePost = (postId: number) => {
     const id = Math.floor(Number(postId));
     const newPosts = data.posts.filter(p => Math.floor(Number(p.Post_ID)) !== id);
-    performSync('deletePost', { Post_ID: id }, { ...data, posts: newPosts }, 'posts', 'Post_ID');
+    return performSync('deletePost', { Post_ID: id }, { ...data, posts: newPosts }, 'posts', 'Post_ID');
   };
 
   const upsertPayscale = (pay: Payscale) => {
     const isNew = !pay.Pay_ID || Number(pay.Pay_ID) === 0;
     const payload = { ...pay, Pay_ID: isNew ? 0 : pay.Pay_ID };
-    const newPays = isNew ? [...data.payscales, payload] : data.payscales.map(p => p.Pay_ID === pay.Pay_ID ? pay : p);
-    performSync('upsertPayscale', payload, { ...data, payscales: newPays as Payscale[] }, 'payscales', 'Pay_ID');
+    const newPays = isNew ? [...data.payscales, payload] : data.payscales.map(p => Math.floor(Number(p.Pay_ID)) === Math.floor(Number(pay.Pay_ID)) ? pay : p);
+    return performSync('upsertPayscale', payload, { ...data, payscales: newPays as Payscale[] }, 'payscales', 'Pay_ID');
   };
 
   const deletePayscale = (payId: number) => {
     const id = Math.floor(Number(payId));
     const newPays = data.payscales.filter(p => Math.floor(Number(p.Pay_ID)) !== id);
-    performSync('deletePayscale', { Pay_ID: id }, { ...data, payscales: newPays }, 'payscales', 'Pay_ID');
+    return performSync('deletePayscale', { Pay_ID: id }, { ...data, payscales: newPays }, 'payscales', 'Pay_ID');
   };
 
   const upsertEmployee = (employee: Employee) => {
     const isNew = !employee.Employee_ID || Number(employee.Employee_ID) === 0;
     const payload = { ...employee, Employee_ID: isNew ? 0 : employee.Employee_ID };
-    const newEmployees = isNew ? [...data.employees, payload] : data.employees.map(e => e.Employee_ID === employee.Employee_ID ? employee : e);
+    const newEmployees = isNew ? [...data.employees, payload] : data.employees.map(e => Math.floor(Number(e.Employee_ID)) === Math.floor(Number(employee.Employee_ID)) ? employee : e);
     
-    performSync('upsertEmployee', payload, { ...data, employees: newEmployees as Employee[] }, 'employees', 'Employee_ID');
+    const result = performSync('upsertEmployee', payload, { ...data, employees: newEmployees as Employee[] }, 'employees', 'Employee_ID');
     setEditingEmployee(null);
     setActiveTab('employees');
+    return result;
   };
 
   const deleteEmployee = (empId: number) => {
     const id = Math.floor(Number(empId));
     const newEmployees = data.employees.filter(e => Math.floor(Number(e.Employee_ID)) !== id);
-    performSync('deleteEmployee', { Employee_ID: id }, { ...data, employees: newEmployees }, 'employees', 'Employee_ID');
-  };
-
-  const toggleEmployeeStatus = (empId: number) => {
-    const employee = data.employees.find(e => Math.floor(Number(e.Employee_ID)) === Math.floor(Number(empId)));
-    if (!employee) return;
-    const newStatus = employee.Active === 'Yes' ? 'No' : 'Yes';
-    const updatedEmployee = { ...employee, Active: newStatus };
-    
-    // Explicitly clear deactivation details when switching from Inactive to Active
-    if (newStatus === 'Yes') {
-      updatedEmployee.DA_Reason = '';
-      updatedEmployee.DA_Doc = '';
-    }
-    
-    upsertEmployee(updatedEmployee as Employee);
+    return performSync('deleteEmployee', { Employee_ID: id }, { ...data, employees: newEmployees }, 'employees', 'Employee_ID');
   };
 
   const togglePostSelection = (postId: number) => {
@@ -333,12 +322,13 @@ export default function App() {
     const newMap = { ...data.userPostSelections, [userId]: newSelections };
     
     setIsSyncing(true);
-    syncService.saveData('updateUserPostSelections', { User_ID: userId, Post_IDs: newSelections }).then(res => {
+    return syncService.saveData('updateUserPostSelections', { User_ID: userId, Post_IDs: newSelections }).then(res => {
       if (res.success) {
         setData(prev => ({ ...prev, userPostSelections: newMap }));
         setLastSynced(new Date());
       }
       setIsSyncing(false);
+      return res;
     });
   };
 
@@ -374,6 +364,14 @@ export default function App() {
           onEdit={setEditingEmployee}
           onAddNew={() => setActiveTab('employeeForm')}
           onDelete={deleteEmployee}
+        />
+      );
+      case 'finalization': return (
+        <FinalizationModule 
+          data={data} 
+          currentUser={currentUser} 
+          onUpdateOffice={upsertOffice}
+          onEditEmployee={(emp) => { setEditingEmployee(emp); setActiveTab('employeeForm'); }}
         />
       );
       case 'managePosts': return <UserPostSelection data={data} currentUser={currentUser} onToggle={togglePostSelection} />;

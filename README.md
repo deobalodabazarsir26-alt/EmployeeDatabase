@@ -1,7 +1,16 @@
 
 # Employee Management System (EMS)
 
-## 🛠️ Master Google Apps Script (v3.3) - Robust Sequential IDs & Reliable Drive Cleanup
+## 🛠️ Master Google Apps Script (v3.5) - Finalization Module & Robust CRUD
+
+### ⚠️ MANDATORY: Spreadsheet Setup
+Before deploying the script, you **MUST** add a new column to your Google Sheet:
+1. Open your Google Spreadsheet.
+2. Go to the **Office** sheet.
+3. Add a header named `Finalized` in the next available column (e.g., Column G).
+4. Initialize the values as `No` for existing rows.
+
+---
 
 ### 1. The Manifest (`appsscript.json`)
 Ensure this is enabled in **Project Settings**.
@@ -32,12 +41,10 @@ Ensure this is enabled in **Project Settings**.
 ```
 
 ### 2. The Code (`Code.gs`)
-Replace your script with this version. It fixes the Drive deletion bug by using case-insensitive field matching and improved URL parsing.
-
 ```javascript
 /**
  * MASTER CRUD SCRIPT FOR EMS PRO
- * Version: 3.3 (Robust Cleanup & ID Sequence)
+ * Version: 3.5 (Finalization Module & Case-Insensitive Mapping)
  */
 
 const FOLDER_ID_PHOTOS = "1nohdez9u46-OmM6im7hD7OjGJhuHfKZm";
@@ -100,6 +107,7 @@ function upsertRow(ss, sheetName, data) {
   const idKey = headers[0];
   let idValue = data[idKey];
 
+  // Robust ID resolution
   if (!idValue || Number(idValue) === 0) {
     idValue = getNextId(sheet);
     data[idKey] = idValue;
@@ -111,7 +119,7 @@ function upsertRow(ss, sheetName, data) {
     if (rows[i][0].toString().trim() === idValue.toString().trim()) { rowIndex = i + 1; break; }
   }
 
-  // --- DRIVE CLEANUP LOGIC ---
+  // DRIVE CLEANUP LOGIC for Photos/Docs
   if (rowIndex > 0 && sheetName === 'Employee') {
     const oldRow = rows[rowIndex - 1];
     headers.forEach((h, i) => {
@@ -130,6 +138,7 @@ function upsertRow(ss, sheetName, data) {
     });
   }
 
+  // Handle Base64 Uploads
   if (data.photoData && data.photoData.base64) {
     data.Photo = uploadFileToDrive(data.photoData, FOLDER_ID_PHOTOS);
     delete data.photoData;
@@ -139,8 +148,10 @@ function upsertRow(ss, sheetName, data) {
     delete data.fileData;
   }
 
+  // Map JS object to Sheet row based on header name (case-insensitive)
   const rowData = headers.map(h => {
-    const key = Object.keys(data).find(k => k.toLowerCase().trim() === h.toString().toLowerCase().trim());
+    const hStr = h.toString().toLowerCase().trim();
+    const key = Object.keys(data).find(k => k.toLowerCase().trim() === hStr);
     return (key !== undefined) ? data[key] : "";
   });
 
@@ -234,8 +245,6 @@ function getSelectionData(ss) {
   vals.forEach(r => {
     const uId = r[0].toString();
     if (!map[uId]) map[uId] = [];
-    
-    // Support either single values or array-like strings in cell
     let val = r[1];
     if (typeof val === 'string' && val.indexOf('[') !== -1) {
       try {
@@ -244,7 +253,6 @@ function getSelectionData(ss) {
           parsed.forEach(v => map[uId].push(Number(v)));
         }
       } catch(e) {
-        // Fallback for manual list [1, 2]
         val.replace(/[\[\]]/g, '').split(',').forEach(v => map[uId].push(Number(v.trim())));
       }
     } else {
@@ -258,17 +266,13 @@ function updateUserPostSelections(ss, payload) {
   const sheet = ss.getSheetByName('UserPostSelections');
   if (!sheet) return;
   const userId = payload.User_ID.toString();
-  const postIds = payload.Post_IDs; // Array of numbers
-
+  const postIds = payload.Post_IDs; 
   const rows = sheet.getDataRange().getValues();
-  // Delete existing rows for this user
   for (let i = rows.length - 1; i >= 1; i--) {
     if (rows[i][0].toString() === userId) {
       sheet.deleteRow(i + 1);
     }
   }
-  // Append new rows (one per Post_ID or single array string based on preference)
-  // Here we use one per row for relational purity
   postIds.forEach(pId => {
     sheet.appendRow([userId, pId]);
   });

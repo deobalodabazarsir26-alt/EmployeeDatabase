@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Employee, AppData, ServiceType, User, UserType, Department, Office, Post } from '../types';
-import { Search, Plus, Edit2, Filter, ChevronLeft, ChevronRight, XCircle, Briefcase, Trash2, ChevronUp, ChevronDown, Building2, Layers, Tag, Info } from 'lucide-react';
+import { Search, Plus, Edit2, Filter, ChevronLeft, ChevronRight, XCircle, Briefcase, Trash2, ChevronUp, ChevronDown, Building2, Layers, Tag, Info, Lock } from 'lucide-react';
 
 interface EmployeeListProps {
   employees: Employee[];
@@ -211,7 +211,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUse
                       .filter(o => !deptFilter || Math.floor(Number(o.Department_ID)) === Math.floor(Number(deptFilter)))
                       .map(o => (
                         <option key={o.Office_ID} value={o.Office_ID}>
-                          {o.Office_Name} ({adminFilterOptions?.officeCounts[Math.floor(Number(o.Office_ID))] || 0})
+                          {o.Office_Name} (#${o.Office_ID}) ({adminFilterOptions?.officeCounts[Math.floor(Number(o.Office_ID))] || 0})
                         </option>
                       ))}
                   </select>
@@ -229,7 +229,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUse
                       .filter(o => Math.floor(Number(o.User_ID)) === Math.floor(Number(currentUser.User_ID)))
                       .map(o => (
                         <option key={o.Office_ID} value={o.Office_ID}>
-                          {o.Office_Name} ({normalFilterOptions?.officeCounts[Math.floor(Number(o.Office_ID))] || 0})
+                          {o.Office_Name} (#${o.Office_ID}) ({normalFilterOptions?.officeCounts[Math.floor(Number(o.Office_ID))] || 0})
                         </option>
                       ))}
                   </select>
@@ -312,9 +312,17 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUse
             <tbody>
               {paginatedItems.map((emp) => {
                 const post = data.posts.find(p => Math.floor(Number(p.Post_ID)) === Math.floor(Number(emp.Post_ID)))?.Post_Name;
-                const office = data.offices.find(o => Math.floor(Number(o.Office_ID)) === Math.floor(Number(emp.Office_ID)))?.Office_Name;
+                const officeObj = data.offices.find(o => Math.floor(Number(o.Office_ID)) === Math.floor(Number(emp.Office_ID)));
+                const officeLabel = officeObj ? `${officeObj.Office_Name} (#${officeObj.Office_ID})` : 'N/A';
+                
+                // Case-insensitive finalized check
+                const isOfficeFinalized = officeObj?.Finalized?.toString().toLowerCase() === 'yes';
+                
                 const isActive = emp.Active !== 'No';
                 const initials = `${emp.Employee_Name.charAt(0)}${emp.Employee_Surname.charAt(0)}`.toUpperCase();
+
+                // Logic: Disable edit for Normal users if Office is finalized
+                const canEdit = isAdmin || !isOfficeFinalized;
 
                 return (
                   <tr key={emp.Employee_ID}>
@@ -335,7 +343,12 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUse
                     <td>
                       <div className="d-flex align-items-center gap-1 text-muted small">
                         <Building2 size={12} />
-                        <span className="text-truncate" style={{maxWidth: '150px'}} title={office}>{office || 'N/A'}</span>
+                        <span className="text-truncate" style={{maxWidth: '120px'}} title={officeLabel}>{officeLabel}</span>
+                        {isOfficeFinalized && (
+                          <span className="badge bg-success-subtle text-success rounded-pill border border-success-subtle p-1 ms-1" title="Finalized Records (LOCKED)">
+                            <Lock size={10} />
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td>
@@ -347,7 +360,14 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUse
                     </td>
                     <td className="text-end pe-4">
                       <div className="d-flex gap-2 justify-content-end">
-                        <button onClick={() => onEdit(emp)} className="btn btn-light btn-sm rounded-3 border text-primary shadow-sm hover-primary"><Edit2 size={16} /></button>
+                        <button 
+                          onClick={() => canEdit && onEdit(emp)} 
+                          className={`btn btn-sm rounded-3 border shadow-sm ${canEdit ? 'btn-light text-primary hover-primary' : 'btn-light text-muted opacity-50 cursor-not-allowed'}`}
+                          title={canEdit ? 'Edit Record' : 'Record Locked: Office Finalized'}
+                          disabled={!canEdit}
+                        >
+                          <Edit2 size={16} />
+                        </button>
                         {isAdmin && <button onClick={() => onDelete(emp.Employee_ID)} className="btn btn-outline-danger btn-sm rounded-3 hover-danger"><Trash2 size={16} /></button>}
                       </div>
                     </td>
@@ -399,6 +419,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, data, currentUse
         .hover-danger:hover { background-color: #dc2626 !important; color: white !important; }
         .animate-fade-in { animation: fadeIn 0.3s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .cursor-not-allowed { cursor: not-allowed !important; }
       `}</style>
     </div>
   );

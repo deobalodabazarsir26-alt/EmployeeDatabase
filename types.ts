@@ -28,6 +28,7 @@ export interface Office {
   AC_No: number;
   Department_ID: number;
   User_ID: number;
+  Finalized?: 'Yes' | 'No';
   T_STMP_ADD?: string;
   T_STMP_UPD?: string;
 }

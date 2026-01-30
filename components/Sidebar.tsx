@@ -11,7 +11,8 @@ import {
   Briefcase, 
   ShieldCheck, 
   Layers, 
-  DollarSign 
+  DollarSign,
+  ShieldAlert
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -37,6 +38,7 @@ const Sidebar: React.FC<SidebarProps> = ({ data, activeTab, setActiveTab, curren
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} />, adminOnly: false },
     { id: 'employees', label: 'Employees', icon: <Users size={20} />, adminOnly: false },
+    { id: 'finalization', label: 'Finalization', icon: <ShieldAlert size={20} />, adminOnly: false },
     { 
       id: 'managePosts', 
       label: userType === UserType.ADMIN ? 'Designation Master' : 'My Designations', 
