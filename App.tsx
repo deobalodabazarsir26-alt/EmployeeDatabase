@@ -160,8 +160,9 @@ export default function App() {
     if (!currentUser) return [];
     const employees = data.employees || [];
     if (currentUser.User_Type === UserType.ADMIN) return employees;
+    const currentUserIdNum = Math.floor(Number(currentUser.User_ID));
     const userOfficeIds = (data.offices || [])
-      .filter(o => Math.floor(Number(o.User_ID)) === Math.floor(Number(currentUser.User_ID)))
+      .filter(o => Math.floor(Number(o.User_ID)) === currentUserIdNum)
       .map(o => Math.floor(Number(o.Office_ID)));
     return employees.filter(e => userOfficeIds.includes(Math.floor(Number(e.Office_ID))));
   }, [currentUser, data.employees, data.offices]);
@@ -178,19 +179,20 @@ export default function App() {
       setSyncError(`Sync error: ${result.error}`);
       await loadData(false);
     } else if (result.data) {
-      const serverObj = result.data;
+      const serverObjOrArray = result.data;
       const updatedData = { ...newState };
       const list = updatedData[listKey];
       
       if (Array.isArray(list)) {
+        const isBatch = Array.isArray(serverObjOrArray);
+        const serverItems = isBatch ? serverObjOrArray : [serverObjOrArray];
+        
         const updatedList = list.map((item: any) => {
-          // Robust numeric ID comparison
           const localId = Math.floor(Number(item[idKey]));
-          const remoteId = Math.floor(Number(serverObj[idKey]));
-          
-          if (localId === remoteId || (localId === 0 && action.startsWith('upsert'))) {
-            return serverObj;
-          }
+          const match = serverItems.find((si: any) => Math.floor(Number(si[idKey])) === localId);
+          if (match) return match;
+          // New items that might have been placeholder 0
+          if (localId === 0 && !isBatch && action.startsWith('upsert')) return serverObjOrArray;
           return item;
         });
         (updatedData as any)[listKey] = updatedList;
@@ -237,6 +239,14 @@ export default function App() {
     return performSync('upsertOffice', payload, { ...data, offices: newOffices as Office[] }, 'offices', 'Office_ID');
   };
 
+  const upsertOffices = (offices: Office[]) => {
+    const updatedOffices = data.offices.map(o => {
+      const match = offices.find(u => Math.floor(Number(u.Office_ID)) === Math.floor(Number(o.Office_ID)));
+      return match ? match : o;
+    });
+    return performSync('batchUpsertOffice', offices, { ...data, offices: updatedOffices }, 'offices', 'Office_ID');
+  };
+
   const deleteOffice = (officeId: number) => {
     const id = Math.floor(Number(officeId));
     const newOffices = data.offices.filter(o => Math.floor(Number(o.Office_ID)) !== id);
@@ -266,7 +276,7 @@ export default function App() {
   const deleteBranch = (branchId: number) => {
     const id = Math.floor(Number(branchId));
     const newBranches = data.branches.filter(b => Math.floor(Number(b.Branch_ID)) !== id);
-    return performSync('deleteBranch', { Branch_ID: id }, { ...data, branches: newBranches }, 'branches', 'Branch_ID');
+    return performSync('deleteBranch', { Bank_ID: id }, { ...data, branches: newBranches }, 'banks', 'Bank_ID');
   };
 
   const upsertPost = (post: Post) => {
@@ -371,6 +381,7 @@ export default function App() {
           data={data} 
           currentUser={currentUser} 
           onUpdateOffice={upsertOffice}
+          onUpdateOffices={upsertOffices}
           onEditEmployee={(emp) => { setEditingEmployee(emp); setActiveTab('employeeForm'); }}
         />
       );
@@ -385,10 +396,12 @@ export default function App() {
   };
 
   return (
-    <div className="d-flex min-vh-100 bg-light">
-      <Sidebar data={data} activeTab={activeTab} setActiveTab={setActiveTab} currentUser={currentUser} onLogout={() => { setCurrentUser(null); localStorage.removeItem('ems_user'); }} />
-      <div className="flex-grow-1" style={{ overflowY: 'auto', height: '100vh' }}>
-        <header className="bg-white border-bottom py-3 px-4 d-flex justify-content-between align-items-center sticky-top shadow-sm" style={{zIndex: 1000}}>
+    <div className="d-flex min-vh-100 bg-light" style={{ overflow: 'hidden' }}>
+      <div className="flex-shrink-0 bg-dark shadow-lg" style={{ zIndex: 1100 }}>
+        <Sidebar data={data} activeTab={activeTab} setActiveTab={setActiveTab} currentUser={currentUser} onLogout={() => { setCurrentUser(null); localStorage.removeItem('ems_user'); }} />
+      </div>
+      <div className="flex-grow-1 d-flex flex-column" style={{ overflowY: 'auto', height: '100vh', position: 'relative' }}>
+        <header className="bg-white border-bottom py-3 px-4 d-flex justify-content-between align-items-center sticky-top shadow-sm" style={{ zIndex: 1000 }}>
           <div className="d-flex align-items-center gap-3">
             <h5 className="mb-0 fw-bold text-dark">{activeTab.charAt(0).toUpperCase() + activeTab.slice(1).replace(/([A-Z])/g, ' $1')}</h5>
             {isSyncing ? (
@@ -408,7 +421,7 @@ export default function App() {
             </button>
           </div>
         </header>
-        <main className="p-4">
+        <main className="p-4 flex-grow-1">
           {syncError && <div className="alert alert-warning border-0 shadow-sm d-flex align-items-center gap-2 mb-4"><AlertCircle size={18} /><div><div className="fw-bold">Sync Warning</div><div className="small">{syncError}</div></div></div>}
           {isLoading && !isSyncing ? (
             <div className="d-flex flex-column align-items-center justify-content-center py-5 mt-5">
