@@ -12,7 +12,8 @@ import {
   ShieldCheck, 
   Layers, 
   DollarSign,
-  ShieldAlert
+  ShieldAlert,
+  X
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -21,14 +22,14 @@ interface SidebarProps {
   setActiveTab: (tab: string) => void;
   currentUser: User;
   onLogout: () => void;
+  onClose?: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ data, activeTab, setActiveTab, currentUser, onLogout }) => {
+const Sidebar: React.FC<SidebarProps> = ({ data, activeTab, setActiveTab, currentUser, onLogout, onClose }) => {
   const userType = currentUser.User_Type;
   const userName = currentUser.User_Name;
   const currentUserId = currentUser.User_ID;
 
-  // Robust count extraction that handles both number and string keys
   const selectedCount = React.useMemo(() => {
     const selections = data.userPostSelections || {};
     const ids = selections[currentUserId] || (selections as any)[currentUserId.toString()];
@@ -55,13 +56,25 @@ const Sidebar: React.FC<SidebarProps> = ({ data, activeTab, setActiveTab, curren
     { id: 'serviceMaster', label: 'Post & Pay Master', icon: <DollarSign size={20} />, adminOnly: true },
   ];
 
+  const handleTabClick = (id: string) => {
+    setActiveTab(id);
+    if (onClose && window.innerWidth <= 992) {
+      onClose();
+    }
+  };
+
   return (
-    <div className="sidebar d-flex flex-column flex-shrink-0 p-3" style={{ width: '280px' }}>
-      <div className="d-flex align-items-center mb-4 px-2">
-        <div className="bg-primary rounded-3 p-2 me-2 d-flex align-items-center justify-content-center text-white" style={{width: '40px', height: '40px'}}>
-          <Users size={24} strokeWidth={3} />
+    <div className="sidebar d-flex flex-column h-100 p-3 bg-dark">
+      <div className="d-flex align-items-center justify-content-between mb-4 px-2">
+        <div className="d-flex align-items-center">
+          <div className="bg-primary rounded-3 p-2 me-2 d-flex align-items-center justify-content-center text-white" style={{width: '40px', height: '40px'}}>
+            <Users size={24} strokeWidth={3} />
+          </div>
+          <span className="fs-5 fw-bold tracking-tight text-white">EMS Portal</span>
         </div>
-        <span className="fs-4 fw-bold tracking-tight text-white">EMS Portal</span>
+        <button className="btn btn-dark d-lg-none p-1" onClick={onClose}>
+          <X size={24} />
+        </button>
       </div>
       
       <ul className="nav nav-pills flex-column mb-auto">
@@ -69,11 +82,11 @@ const Sidebar: React.FC<SidebarProps> = ({ data, activeTab, setActiveTab, curren
           if (item.adminOnly && userType !== UserType.ADMIN) return null;
           
           if (item.type === 'divider') {
-            return <hr key={`div-${idx}`} className="bg-secondary opacity-25 my-3" />;
+            return <hr key={`div-${idx}`} className="bg-secondary opacity-25 my-2 my-md-3" />;
           }
           
           if (item.type === 'header') {
-            return <li key={`head-${idx}`} className="px-3 mb-2 small text-uppercase text-secondary fw-bold" style={{fontSize: '0.65rem', letterSpacing: '0.05em'}}>{item.label}</li>;
+            return <li key={`head-${idx}`} className="px-3 mb-1 mb-md-2 small text-uppercase text-secondary fw-bold" style={{fontSize: '0.65rem', letterSpacing: '0.05em'}}>{item.label}</li>;
           }
 
           const isActive = activeTab === item.id || (item.id === 'employees' && activeTab === 'employeeForm');
@@ -81,8 +94,8 @@ const Sidebar: React.FC<SidebarProps> = ({ data, activeTab, setActiveTab, curren
           return (
             <li className="nav-item" key={item.id}>
               <button
-                onClick={() => setActiveTab(item.id!)}
-                className={`nav-link border-0 w-100 text-start ${isActive ? 'active' : ''}`}
+                onClick={() => handleTabClick(item.id!)}
+                className={`nav-link border-0 w-100 text-start py-2 py-md-3 ${isActive ? 'active' : ''}`}
               >
                 {item.icon}
                 <span className="flex-grow-1">{item.label}</span>
@@ -94,9 +107,9 @@ const Sidebar: React.FC<SidebarProps> = ({ data, activeTab, setActiveTab, curren
         })}
       </ul>
 
-      <hr className="bg-secondary opacity-25" />
+      <hr className="bg-secondary opacity-25 my-3" />
       
-      <div className="dropdown">
+      <div className="dropdown mt-auto">
         <div className="d-flex align-items-center text-white text-decoration-none px-2 mb-2">
           <div className="bg-secondary rounded-circle d-flex align-items-center justify-content-center me-2" style={{width: '32px', height: '32px'}}>
             {userName.charAt(0).toUpperCase()}

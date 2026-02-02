@@ -15,7 +15,7 @@ import UserManagement from './components/UserManagement';
 import DepartmentManagement from './components/DepartmentManagement';
 import ServiceMasterManagement from './components/ServiceMasterManagement';
 import FinalizationModule from './components/FinalizationModule';
-import { RefreshCw, CheckCircle, AlertCircle, Clock } from 'lucide-react';
+import { RefreshCw, CheckCircle, AlertCircle, Clock, Menu, X } from 'lucide-react';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
@@ -36,6 +36,7 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSynced, setLastSynced] = useState<Date>(new Date());
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 992);
 
   const [data, setData] = useState<AppData>(() => {
     try {
@@ -49,6 +50,26 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState('dashboard');
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+
+  // Close sidebar on mobile when tab changes
+  useEffect(() => {
+    if (window.innerWidth <= 992) {
+      setIsSidebarOpen(false);
+    }
+  }, [activeTab]);
+
+  // Handle window resize for sidebar
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth > 992) {
+        setIsSidebarOpen(true);
+      } else {
+        setIsSidebarOpen(false);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const loadData = useCallback(async (showIndicator = true) => {
     if (showIndicator) setIsLoading(true);
@@ -349,8 +370,7 @@ export default function App() {
     }
   };
 
-  // 1. Initial Loading State
-  if (isLoading && !isSyncing && data.users.length <= 2) { // Allow showing login even if background sync is on
+  if (isLoading && !isSyncing && data.users.length <= 2) {
     return (
       <div className="min-vh-100 d-flex flex-column align-items-center justify-content-center bg-light">
         <div className="spinner-border text-primary mb-3" role="status"></div>
@@ -359,7 +379,6 @@ export default function App() {
     );
   }
 
-  // 2. Login State (No shell)
   if (!currentUser) {
     return (
       <Login 
@@ -372,46 +391,70 @@ export default function App() {
     );
   }
 
-  // 3. Authenticated Shell
   return (
     <div className="d-flex min-vh-100 bg-light" style={{ overflow: 'hidden' }}>
-      {/* Sidebar - Only for authenticated users */}
-      <div className="flex-shrink-0 bg-dark shadow-lg" style={{ zIndex: 1100, width: '280px', minWidth: '280px' }}>
+      {/* Sidebar - Overlay for mobile, Static for desktop */}
+      <div 
+        className={`sidebar-container ${isSidebarOpen ? 'show' : ''}`}
+        style={{ zIndex: 1100 }}
+      >
         <Sidebar 
           data={data} 
           activeTab={activeTab} 
           setActiveTab={setActiveTab} 
           currentUser={currentUser} 
           onLogout={() => { setCurrentUser(null); localStorage.removeItem('ems_user'); }} 
+          onClose={() => setIsSidebarOpen(false)}
         />
       </div>
 
+      {/* Mobile Sidebar Overlay */}
+      {isSidebarOpen && window.innerWidth <= 992 && (
+        <div 
+          className="sidebar-overlay" 
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
       <div className="flex-grow-1 d-flex flex-column" style={{ overflowY: 'auto', height: '100vh', position: 'relative' }}>
-        {/* Header - Only for authenticated users */}
-        <header className="bg-white border-bottom py-3 px-4 d-flex justify-content-between align-items-center sticky-top shadow-sm" style={{ zIndex: 1000 }}>
-          <div className="d-flex align-items-center gap-3">
-            <h5 className="mb-0 fw-bold text-dark">{activeTab.charAt(0).toUpperCase() + activeTab.slice(1).replace(/([A-Z])/g, ' $1')}</h5>
-            {isSyncing ? (
-              <span className="badge bg-primary-subtle text-primary animate-pulse d-flex align-items-center gap-1"><RefreshCw size={12} className="animate-spin" /> Syncing...</span>
-            ) : syncError ? (
-              <span className="badge bg-danger-subtle text-danger d-flex align-items-center gap-1"><AlertCircle size={12} /> Sync Error</span>
-            ) : (
-              <span className="badge bg-success-subtle text-success d-flex align-items-center gap-1"><CheckCircle size={12} /> Cloud Connected</span>
-            )}
+        <header className="bg-white border-bottom py-2 py-md-3 px-3 px-md-4 d-flex justify-content-between align-items-center sticky-top shadow-sm" style={{ zIndex: 1000 }}>
+          <div className="d-flex align-items-center gap-2 gap-md-3">
+            <button 
+              className="btn btn-light d-lg-none p-1 border shadow-xs" 
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            >
+              <Menu size={24} />
+            </button>
+            <h6 className="mb-0 fw-bold text-dark d-none d-sm-block">
+              {activeTab.charAt(0).toUpperCase() + activeTab.slice(1).replace(/([A-Z])/g, ' $1')}
+            </h6>
+            <div className="d-flex align-items-center gap-1">
+              {isSyncing ? (
+                <span className="badge bg-primary-subtle text-primary d-flex align-items-center gap-1 tiny"><RefreshCw size={10} className="animate-spin" /> Syncing</span>
+              ) : syncError ? (
+                <span className="badge bg-danger-subtle text-danger d-flex align-items-center gap-1 tiny"><AlertCircle size={10} /> Error</span>
+              ) : (
+                <span className="badge bg-success-subtle text-success d-flex align-items-center gap-1 tiny d-none d-md-inline-flex"><CheckCircle size={10} /> Online</span>
+              )}
+            </div>
           </div>
-          <div className="d-flex align-items-center gap-3">
-            <div className="small text-muted d-none d-md-block"><Clock size={12} /> Last: {lastSynced.toLocaleTimeString()}</div>
-            <button onClick={() => loadData()} disabled={isSyncing} className="btn btn-light btn-sm rounded-pill border shadow-sm px-3 d-flex align-items-center gap-2">
-              <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} /> Refresh
+          <div className="d-flex align-items-center gap-2 gap-md-3">
+            <div className="tiny text-muted d-none d-lg-block"><Clock size={10} /> Last: {lastSynced.toLocaleTimeString()}</div>
+            <button onClick={() => loadData()} disabled={isSyncing} className="btn btn-light btn-sm rounded-pill border shadow-sm px-2 px-md-3 d-flex align-items-center gap-2">
+              <RefreshCw size={12} className={isSyncing ? 'animate-spin' : ''} /> 
+              <span className="d-none d-md-inline">Refresh</span>
             </button>
           </div>
         </header>
 
-        <main className="p-4 flex-grow-1 position-relative">
+        <main className="p-2 p-md-4 flex-grow-1 position-relative">
           {syncError && (
-            <div className="alert alert-warning border-0 shadow-sm mb-4">
-              <AlertCircle size={18} className="me-2" />
-              <strong>Sync Warning:</strong> {syncError}
+            <div className="alert alert-warning border-0 shadow-sm mb-4 small py-2 d-flex align-items-center justify-content-between">
+              <div>
+                <AlertCircle size={14} className="me-2" />
+                <strong>Sync Warning:</strong> {syncError}
+              </div>
+              <button className="btn btn-sm" onClick={() => setSyncError(null)}><X size={14} /></button>
             </div>
           )}
           {isLoading && !isSyncing ? (
@@ -422,6 +465,46 @@ export default function App() {
           ) : renderActiveTab()}
         </main>
       </div>
+
+      <style>{`
+        .sidebar-container {
+          position: fixed;
+          top: 0;
+          left: 0;
+          height: 100vh;
+          width: 280px;
+          background-color: #0f172a;
+          transform: translateX(-100%);
+          transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+        .sidebar-container.show {
+          transform: translateX(0);
+        }
+        .sidebar-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100vw;
+          height: 100vh;
+          background-color: rgba(0, 0, 0, 0.5);
+          backdrop-filter: blur(2px);
+          z-index: 1050;
+        }
+        @media (min-width: 992px) {
+          .sidebar-container {
+            position: relative;
+            transform: translateX(0);
+            flex-shrink: 0;
+          }
+          .sidebar-overlay {
+            display: none;
+          }
+        }
+        .animate-spin { animation: spin 1s linear infinite; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .tiny { font-size: 0.65rem; }
+      `}</style>
     </div>
   );
 }
